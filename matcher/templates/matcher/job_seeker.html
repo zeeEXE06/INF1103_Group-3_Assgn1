@@ -1,0 +1,108 @@
+{% extends "matcher/base.html" %}
+{% block title %}Job Seeker — Upload Resume{% endblock %}
+
+{% block content %}
+<section class="container page-header">
+    <p class="eyebrow">Job seeker workflow</p>
+    <h1>Upload your resume &amp; set your preferences</h1>
+    <p class="page-header__lede">
+        We'll compare your resume and preferences against open roles and
+        rank the ones that fit you best.
+    </p>
+</section>
+
+<section class="container">
+    <form method="post" enctype="multipart/form-data" novalidate class="upload-form" id="job-seeker-form">
+        {% csrf_token %}
+
+        <fieldset class="form-section">
+            <legend>
+                <span class="form-section__num">1</span>
+                Your resume
+            </legend>
+
+            <div class="dropzone" data-dropzone data-target="id_resume_file">
+                <input type="file" name="resume_file" id="id_resume_file" accept=".pdf" required>
+                <div class="dropzone__prompt">
+                    <span class="dropzone__icon" aria-hidden="true">📄</span>
+                    <p><strong>Drag &amp; drop</strong> your resume PDF here, or click to browse.</p>
+                    <p class="dropzone__hint">PDF only, up to 10MB.</p>
+                </div>
+                <p class="dropzone__filename" data-filename hidden></p>
+            </div>
+            {% if form.resume_file.errors %}
+            <ul class="field-errors">
+                {% for error in form.resume_file.errors %}<li>{{ error }}</li>{% endfor %}
+            </ul>
+            {% endif %}
+        </fieldset>
+
+        <fieldset class="form-section">
+            <legend>
+                <span class="form-section__num">2</span>
+                Work arrangement
+            </legend>
+            <div class="choice-grid">
+                {% for radio in form.work_arrangement %}
+                <label class="choice-pill">
+                    {{ radio.tag }}
+                    <span>{{ radio.choice_label }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            {% if form.work_arrangement.errors %}
+            <ul class="field-errors">
+                {% for error in form.work_arrangement.errors %}<li>{{ error }}</li>{% endfor %}
+            </ul>
+            {% endif %}
+        </fieldset>
+
+        <fieldset class="form-section">
+            <legend>
+                <span class="form-section__num">3</span>
+                Preferred location(s)
+            </legend>
+            <div class="choice-grid">
+                {% for checkbox in form.locations %}
+                <label class="choice-pill">
+                    {{ checkbox.tag }}
+                    <span>{{ checkbox.choice_label }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            {% if form.locations.errors %}
+            <ul class="field-errors">
+                {% for error in form.locations.errors %}<li>{{ error }}</li>{% endfor %}
+            </ul>
+            {% endif %}
+        </fieldset>
+
+        <fieldset class="form-section">
+            <legend>
+                <span class="form-section__num">4</span>
+                Working hours
+            </legend>
+            <div class="choice-grid">
+                {% for radio in form.working_hours %}
+                <label class="choice-pill">
+                    {{ radio.tag }}
+                    <span>{{ radio.choice_label }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            {% if form.working_hours.errors %}
+            <ul class="field-errors">
+                {% for error in form.working_hours.errors %}<li>{{ error }}</li>{% endfor %}
+            </ul>
+            {% endif %}
+        </fieldset>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn--primary btn--large" data-submit-btn>
+                <span data-btn-label>Find matching jobs</span>
+                <span class="spinner" data-btn-spinner hidden aria-hidden="true"></span>
+            </button>
+        </div>
+    </form>
+</section>
+{% endblock %}

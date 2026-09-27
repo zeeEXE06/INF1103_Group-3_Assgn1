@@ -1,0 +1,20 @@
+[
+  {
+    "job_id": "J001",
+    "title": "Software Developer",
+    "company": "Brightleaf Systems",
+    "required_skills": ["Python", "Django", "SQL"],
+    "location": "Central",
+    "work_arrangement": "WFH",
+    "working_hours": "Flexible"
+  },
+  {
+    "job_id": "J002",
+    "title": "Backend Engineer",
+    "company": "Harborview Digital",
+    "required_skills": ["Python", "PostgreSQL", "Docker", "AWS"],
+    "location": "East",
+    "work_arrangement": "Hybrid",
+    "working_hours": "Standard"
+  }
+]

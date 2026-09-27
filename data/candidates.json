@@ -1,0 +1,22 @@
+[
+  {
+    "candidate_id": "C001",
+    "filename": "candidate_01.pdf",
+    "name": "John Tan",
+    "skills": ["Python", "Django", "SQL", "REST API"],
+    "experience": ["Software Developer, 3 years"],
+    "education": ["B.Sc. Computer Science"],
+    "location": "Central",
+    "work_preferences": { "wfh": true, "flexible_hours": true }
+  },
+  {
+    "candidate_id": "C002",
+    "filename": "candidate_02.pdf",
+    "name": "Priya Sundaram",
+    "skills": ["Python", "Flask", "PostgreSQL", "Docker"],
+    "experience": ["Backend Engineer, 2 years"],
+    "education": ["B.Eng. Information Systems"],
+    "location": "North",
+    "work_preferences": { "hybrid": true }
+  }
+]
