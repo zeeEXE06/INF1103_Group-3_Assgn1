@@ -1,0 +1,75 @@
+{% extends "matcher/base.html" %}
+{% block title %}Resume Matcher — AI-Powered Resume & Job Matching{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <div class="container hero__inner">
+        <p class="eyebrow">AI-powered matching</p>
+        <h1>Find the right fit, faster.</h1>
+        <p class="hero__lede">
+            Upload a resume or a job posting and get a clear, explained match —
+            skills, experience, location and work-style compatibility, ranked
+            and scored, not just eyeballed.
+        </p>
+    </div>
+</section>
+
+<section class="container">
+    <div class="role-grid">
+        <article class="role-card">
+            <div class="role-card__icon" aria-hidden="true">🎯</div>
+            <h2>I'm a Job Seeker</h2>
+            <p>Upload your resume, set your preferences, and see which open roles fit you best — ranked and explained.</p>
+            <ul class="role-card__points">
+                <li>Upload one PDF resume</li>
+                <li>Set work arrangement, location &amp; hours</li>
+                <li>Get ranked, scored job matches</li>
+            </ul>
+            <a class="btn btn--primary" href="{% url 'matcher:job_seeker_upload' %}">
+                Find matching jobs
+            </a>
+        </article>
+
+        <article class="role-card">
+            <div class="role-card__icon" aria-hidden="true">🏢</div>
+            <h2>I'm an Employer</h2>
+            <p>Upload a job posting and a batch of resumes to instantly rank candidates by fit.</p>
+            <ul class="role-card__points">
+                <li>Upload one job description PDF</li>
+                <li>Upload multiple candidate resumes</li>
+                <li>Get ranked, scored candidates</li>
+            </ul>
+            <a class="btn btn--primary" href="{% url 'matcher:employer_upload' %}">
+                Match candidates
+            </a>
+        </article>
+    </div>
+</section>
+
+<section class="container how-it-works">
+    <h2>How it works</h2>
+    <ol class="steps">
+        <li>
+            <span class="steps__num">1</span>
+            <div>
+                <h3>Upload</h3>
+                <p>PDF resumes and job postings, validated on the spot.</p>
+            </div>
+        </li>
+        <li>
+            <span class="steps__num">2</span>
+            <div>
+                <h3>Analyze</h3>
+                <p>Text is extracted and structured, then run through AI analysis.</p>
+            </div>
+        </li>
+        <li>
+            <span class="steps__num">3</span>
+            <div>
+                <h3>Match &amp; rank</h3>
+                <p>Business rules turn AI output into a transparent, ranked score.</p>
+            </div>
+        </li>
+    </ol>
+</section>
+{% endblock %}

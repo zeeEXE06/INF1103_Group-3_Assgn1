@@ -1,0 +1,78 @@
+{% extends "matcher/base.html" %}
+{% block title %}Employer — Match Results{% endblock %}
+
+{% block content %}
+<section class="container page-header">
+    <p class="eyebrow">Employer workflow</p>
+    <h1>Candidate match results</h1>
+    <p class="page-header__lede">Ranked from strongest to weakest fit against the job posting.</p>
+</section>
+
+<section class="container results-list">
+    {% if candidates %}
+        {% for candidate in candidates %}
+        <article class="result-card">
+            <div class="result-card__rank">#{{ candidate.rank }}</div>
+
+            <div class="result-card__score" style="--score: {{ candidate.match_score }}">
+                <svg viewBox="0 0 120 120" class="score-ring" aria-hidden="true">
+                    <circle class="score-ring__track" cx="60" cy="60" r="52"></circle>
+                    <circle class="score-ring__fill" cx="60" cy="60" r="52" pathLength="100"
+                            style="stroke-dasharray: {{ candidate.match_score }} 100;"></circle>
+                </svg>
+                <span class="score-ring__value">{{ candidate.match_score }}%</span>
+            </div>
+
+            <div class="result-card__body">
+                <h2>{{ candidate.name }}</h2>
+                <p class="result-card__summary">{{ candidate.summary }}</p>
+
+                <div class="result-grid">
+                    <div class="result-block">
+                        <h3>Skills Match</h3>
+                        <ul class="check-list">
+                            {% for skill in candidate.matched_skills %}
+                            <li class="check-list__item check-list__item--yes">{{ skill }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+
+                    <div class="result-block">
+                        <h3>Compatibility</h3>
+                        <ul class="check-list">
+                            <li class="check-list__item {% if candidate.experience_match %}check-list__item--yes{% else %}check-list__item--no{% endif %}">
+                                {{ candidate.experience|join:", " }}
+                            </li>
+                            <li class="check-list__item {% if candidate.location_match %}check-list__item--yes{% else %}check-list__item--no{% endif %}">
+                                Location: {{ candidate.location }}
+                            </li>
+                            <li class="check-list__item {% if candidate.work_arrangement_match %}check-list__item--yes{% else %}check-list__item--no{% endif %}">
+                                Work arrangement compatible
+                            </li>
+                        </ul>
+                    </div>
+
+                    {% if candidate.missing_skills %}
+                    <div class="result-block">
+                        <h3>Missing Requirements</h3>
+                        <ul class="check-list">
+                            {% for skill in candidate.missing_skills %}
+                            <li class="check-list__item check-list__item--missing">{{ skill }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </article>
+        {% endfor %}
+    {% else %}
+    <div class="empty-state">
+        <p class="empty-state__icon" aria-hidden="true">🗂️</p>
+        <h2>No candidates yet</h2>
+        <p>Upload a job posting and resumes to see ranked matches here.</p>
+        <a class="btn btn--primary" href="{% url 'matcher:employer_upload' %}">Upload candidates</a>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

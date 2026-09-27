@@ -1,0 +1,49 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Resume Matcher{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+<body>
+    <header class="site-header">
+        <div class="container site-header__inner">
+            <a href="{% url 'matcher:landing' %}" class="brand">
+                <span class="brand__mark" aria-hidden="true">RM</span>
+                <span class="brand__name">Resume Matcher</span>
+            </a>
+            <nav class="site-nav" aria-label="Primary">
+                <a href="{% url 'matcher:job_seeker_upload' %}">Job Seekers</a>
+                <a href="{% url 'matcher:employer_upload' %}">Employers</a>
+            </nav>
+        </div>
+    </header>
+
+    {% if messages %}
+    <div class="container">
+        <ul class="messages">
+            {% for message in messages %}
+            <li class="alert alert--{{ message.tags }}">{{ message }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <main class="site-main">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+        <div class="container">
+            <p>Resume &amp; Job Matcher &mdash; Sprint 1 (UI). No data is analyzed or stored yet.</p>
+        </div>
+    </footer>
+
+    <script src="{% static 'js/main.js' %}"></script>
+</body>
+</html>
