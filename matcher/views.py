@@ -21,6 +21,14 @@ from django.shortcuts import redirect, render
 from .dummy_data import sample_ranked_candidates, sample_ranked_jobs
 from .forms import JobPostingForm, ResumeUploadForm, validate_pdf_file
 
+from .managers.ai_manager import ask_ai
+
+#def test_ai(request):
+#    result = ask_ai("Verify integration with AI and return a simple response.")
+    
+#    return render(request, "matcher/base.html", {
+#        "result": result
+#    })
 
 def landing(request):
     """Landing page: choose Job Seeker or Employer."""

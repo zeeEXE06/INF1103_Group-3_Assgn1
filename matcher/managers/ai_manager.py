@@ -1,14 +1,23 @@
-"""
-AI Manager — Sprint 4 placeholder.
+import os
+from dotenv import load_dotenv
+from openai import OpenAI
 
-Not implemented yet. This module will own all AI/API interaction only:
-    - building prompts from structured records
-    - calling the AI API (or a mock/demo implementation)
-    - parsing and schema-validating the JSON response
-    - retrying malformed responses
-    - logging failures without crashing the app
+load_dotenv()
 
-It must contain zero domain/business logic — that belongs to
-logic_manager.py. See AI_MODE / AI_API_KEY in config/settings.py for
-the configuration this module will read from.
-"""
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.getenv("OPENROUTER_API_KEY")
+)
+
+def ask_ai(prompt):
+    response = client.chat.completions.create(
+        model="openrouter/free",
+        messages=[
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ]
+    )
+    print(os.getenv("OPENROUTER_API_KEY") is not None)
+    return response.choices[0].message.content
