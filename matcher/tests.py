@@ -1,14 +1,14 @@
 """
-Sprint 1 tests: UI is reachable and basic upload validation works.
+Sprint 1 tests: pages load and upload checks work.
 
-Later sprints add tests for the Data/AI/Logic Managers per the spec's
-testing requirements (PDF validation edge cases, save/load, corrupt
-data handling, schema validation, scoring, ranking, mocked AI calls).
+TODO (Sprint 2): save/load, missing and broken file tests
+TODO (Sprint 3): scoring, "Strong Match" rule and ranking tests
+TODO (Sprint 4): AI response checks and mocked AI call tests
 """
 
 import io
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 
@@ -61,6 +61,7 @@ class EmployerWorkflowTests(TestCase):
         )
         self.assertRedirects(response, reverse("matcher:employer_results"))
 
+    @override_settings(DATA_MODE="debug")
     def test_results_page_shows_ranked_candidates(self):
         response = self.client.get(reverse("matcher:employer_results"))
         self.assertEqual(response.status_code, 200)
@@ -80,6 +81,7 @@ class JobSeekerWorkflowTests(TestCase):
                 "work_arrangement": "wfh",
                 "locations": ["central", "north"],
                 "working_hours": "flexible",
+                "industry": "tech",
             },
         )
         self.assertRedirects(response, reverse("matcher:job_results"))
@@ -92,7 +94,24 @@ class JobSeekerWorkflowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "This field is required")
 
+    @override_settings(DATA_MODE="debug")
     def test_results_page_shows_ranked_jobs(self):
         response = self.client.get(reverse("matcher:job_results"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "#1")
+
+
+class DataModeTests(TestCase):
+    @override_settings(DATA_MODE="debug")
+    def test_debug_mode_shows_sample_data(self):
+        response = self.client.get(reverse("matcher:employer_results"))
+        self.assertContains(response, "John Tan")
+
+    @override_settings(DATA_MODE="live")
+    def test_live_mode_shows_empty_state_until_sprint_2(self):
+        response = self.client.get(reverse("matcher:employer_results"))
+        self.assertNotContains(response, "John Tan")
+        self.assertContains(response, "No candidates yet")
+
+        response = self.client.get(reverse("matcher:job_results"))
+        self.assertContains(response, "No matches yet")

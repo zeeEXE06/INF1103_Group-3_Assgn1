@@ -1,7 +1,6 @@
 /*
- * Sprint 1 UI behaviour: drag-and-drop file inputs and a submit-button
- * loading state. Purely presentational — no fetch/AJAX here, forms
- * still submit normally to Django views.
+ * Drag-and-drop file uploads and a loading spinner on the submit button.
+ * Forms still submit normally to the Django views.
  */
 
 document.addEventListener("DOMContentLoaded", () => {

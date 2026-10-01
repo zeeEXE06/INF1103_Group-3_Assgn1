@@ -1,14 +1,15 @@
 """
-Logic Manager — Sprint 3 placeholder.
+Logic Manager - scores and ranks the matches.
 
-Not implemented yet. This module will be the application's domain
-brain: taking AI-enriched records and applying business rules —
-scoring, the multi-condition match-quality rule, and ranking. It
-receives its input from the AI Manager and its records from the Data
-Manager; it does not talk to either the AI API or the filesystem
-directly.
+Sprint 1: not built yet. dummy_data.py gives already-ranked sample data.
+Sprint 3: build the scoring (Skills 40%, Experience 25%, Education 10%,
+          Location 10%, Work Arrangement 10%, Working Hours 5%), the
+          "Strong Match" rule and the ranking.
+Sprint 4: use the AI Manager's output as input.
 
-matcher/dummy_data.py currently stands in for this module's output
-(already-scored, already-ranked sample records) so the UI has
-something real to render.
+This file does not call the AI API or read files directly.
 """
+
+# TODO (Sprint 3): calculate_score()
+# TODO (Sprint 3): is_strong_match()
+# TODO (Sprint 3): rank_candidates() / rank_jobs()

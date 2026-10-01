@@ -1,7 +1,8 @@
 """
-OCR service — Sprint 2 placeholder.
+OCR service - reads text from scanned (image) PDFs.
 
-Not implemented yet. Will handle text extraction for scanned/image-
-based PDFs where direct text extraction (pdf_service.py) comes back
-empty.
+Sprint 1: not built yet.
+Sprint 2: used when pdf_service.py finds no text in a PDF.
 """
+
+# TODO (Sprint 2): extract_text_from_scan()

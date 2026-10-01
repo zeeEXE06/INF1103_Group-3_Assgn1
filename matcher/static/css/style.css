@@ -1,5 +1,6 @@
+@charset "UTF-8";
 /* ==========================================================================
-   Resume & Job Matcher — Sprint 1 UI
+   Resume & Job Matcher - Sprint 1 UI
    Theme: navy / ice-blue, clean SaaS style. Mobile-first, no build step.
    ========================================================================== */
 
@@ -375,6 +376,32 @@ a:hover { text-decoration: underline; }
     font-weight: 600;
 }
 .choice-pill input { accent-color: var(--ice-600); }
+
+/* Select box (e.g. Preferred Industry) */
+
+.select-box {
+    display: block;
+    width: 100%;
+    max-width: 320px;
+    padding: 0.65rem 2.25rem 0.65rem 1rem;
+    font-family: inherit;
+    font-size: 0.92rem;
+    color: var(--navy-900);
+    background-color: var(--white);
+    border: 1.5px solid var(--slate-200);
+    border-radius: var(--radius-md);
+    appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%2364748b'><path fill-rule='evenodd' d='M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.24 4.5a.75.75 0 01-1.08 0l-4.24-4.5a.75.75 0 01.02-1.06z' clip-rule='evenodd'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 16px;
+    cursor: pointer;
+    transition: border-color 0.12s ease;
+}
+.select-box:focus {
+    outline: none;
+    border-color: var(--ice-600);
+}
 
 .form-actions { margin-top: 1.5rem; }
 

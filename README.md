@@ -22,17 +22,18 @@ What's real in this sprint:
 - Employer: upload a job posting PDF + multiple candidate resume PDFs
   (drag-and-drop, validated: must be `.pdf`, non-empty, under 10MB)
 - Job seeker: upload a resume PDF + set work arrangement / location(s) /
-  working hours preferences
+  working hours / industry preferences
 - Both results pages: ranked cards with match score, matched/missing
   skills, compatibility checks, empty states
-- 10 automated tests covering page loads, upload validation, and
-  successful-submission redirects
+- 12 automated tests covering page loads, upload validation,
+  successful-submission redirects, and the debug/live data mode toggle
 
 What's **not** real yet (by design — later sprints):
 
 - Uploaded files are validated but not read, stored, or processed —
-  results pages currently show hardcoded sample data
-  (`matcher/dummy_data.py`)
+  see [Where uploaded data goes](#where-uploaded-data-goes)
+- In `debug` mode results pages show sample data; in `live` mode they're
+  empty — see [Debug vs live mode](#debug-vs-live-mode)
 - No database persistence (Data Manager — Sprint 2)
 - No scoring/ranking logic (Logic Manager — Sprint 3)
 - No AI analysis, even mocked (AI Manager — Sprint 4)
@@ -77,7 +78,9 @@ Interpreter** from the Command Palette (`Ctrl+Shift+P`) and pick the
 pip install -r requirements.txt
 ```
 
-### 5. Configure environment variables
+### 5. Create your `.env` file
+
+Make your own copy of the settings template:
 
 ```bash
 # macOS / Linux
@@ -87,8 +90,12 @@ cp .env.example .env
 copy .env.example .env
 ```
 
-The defaults in `.env.example` work as-is for Sprint 1 — nothing needs
-to be filled in yet (no AI API key is required until Sprint 4).
+This creates a new file called `.env` in the project folder. **Don't
+copy anything into `settings.py`** — it reads `.env` automatically.
+
+The values in it work as-is for Sprint 1, so you don't need to change
+anything yet. See [Settings and secrets](#settings-and-secrets-env) to
+understand how it works.
 
 ### 6. Run the app
 
@@ -105,29 +112,155 @@ Open **http://127.0.0.1:8000/** in your browser.
 python manage.py test matcher
 ```
 
-You should see `Ran 10 tests ... OK`.
+You should see `Ran 12 tests ... OK`.
+
+---
+
+## Settings and secrets (`.env`)
+
+Three files work together. You only ever edit **`.env`**.
+
+| File | What it is | In git? | Do you edit it? |
+|---|---|---|---|
+| `config/settings.py` | Defines every setting, with a safe default | ✅ Yes | ❌ No (only to add a new setting) |
+| `.env.example` | Template listing every setting you can change | ✅ Yes | ❌ No (only to add a new setting) |
+| `.env` | **Your own copy** with your values and secrets | ❌ Never | ✅ Yes |
+
+### How it works
+
+1. When the app starts, `settings.py` loads your `.env` file.
+2. Each setting uses the value from `.env` if it's there, or falls
+   back to its default if it isn't:
+
+   ```python
+   DATA_MODE = os.environ.get("DATA_MODE", "debug")
+   #                          from .env ↑   default ↑
+   ```
+
+3. So no `.env` file still works — you just get all the defaults.
+
+After changing `.env`, **restart `runserver`** for it to take effect.
+
+### Available settings
+
+| Setting | Default | What it does |
+|---|---|---|
+| `DATA_MODE` | `debug` | `debug` = sample data, `live` = real data ([details](#debug-vs-live-mode)) |
+| `MAX_UPLOAD_SIZE_MB` | `10` | Largest PDF users can upload |
+| `AI_MODE` | `mock` | `mock` = fake AI replies, `live` = real AI calls (Sprint 4) |
+| `AI_API_KEY` | *(empty)* | Your AI API key (Sprint 4) |
+| `DJANGO_DEBUG` | `True` | Shows detailed error pages — set `False` if deployed |
+| `DJANGO_SECRET_KEY` | placeholder | Must be a real random value if deployed |
+| `DJANGO_ALLOWED_HOSTS` | `127.0.0.1,localhost` | Web addresses allowed to serve the app |
+
+### ⚠️ Secrets rule
+
+> **Real secrets (like `AI_API_KEY`) go in `.env` only — never in
+> `settings.py`.**
+
+`settings.py` is pushed to GitHub, so anyone can read it. It only holds
+safe placeholder defaults. `.env` is git-ignored and never leaves your
+computer. A leaked API key can be used by anyone and charged to your
+account.
+
+### Adding a new setting
+
+1. Add it to `settings.py` with a safe default:
+   `MY_SETTING = os.environ.get("MY_SETTING", "default")`
+2. Add it to `.env.example` so teammates know it exists.
+3. Tell the team to copy the new line into their own `.env`.
+
+---
+
+## Debug vs live mode
+
+One setting controls where the results pages get their data.
+
+**How to switch:** change this line in your `.env` file (not
+`settings.py`), then restart `runserver`.
+
+```bash
+DATA_MODE=debug   # or: DATA_MODE=live
+```
+
+| Mode | What the results pages show | Use it for |
+|---|---|---|
+| `debug` *(default)* | Fixed sample data from `matcher/dummy_data.py` | Working on the UI, demos |
+| `live` | Real saved data — **empty until Sprint 2** | Testing real uploads |
+
+- If `DATA_MODE` isn't set, the app uses `debug`.
+- The setting lives in `config/settings.py`; the switch happens in
+  `get_ranked_candidates()` / `get_ranked_jobs()` in `matcher/views.py`.
+- This is **not** Django's `DJANGO_DEBUG`. That one only controls
+  Django's error pages.
+
+---
+
+## Where uploaded data goes
+
+> **Right now (Sprint 1), nothing is saved.** Uploads are checked, then
+> thrown away when the request ends.
+
+### What users submit
+
+| Who | Field | Python type | Example |
+|---|---|---|---|
+| Employer | `job_file` | `UploadedFile` (PDF) | `job.pdf` |
+| Employer | `candidate_files` | `list` of `UploadedFile` (PDFs) | `[c1.pdf, c2.pdf]` |
+| Job seeker | `resume_file` | `UploadedFile` (PDF) | `resume.pdf` |
+| Job seeker | `work_arrangement` | `str` | `"wfh"` |
+| Job seeker | `locations` | `list` of `str` | `["north", "central"]` |
+| Job seeker | `working_hours` | `str` | `"flexible"` |
+| Job seeker | `industry` | `str` | `"tech"` |
+
+These are checked in `matcher/managers/io_manager.py` and given clear
+names (marked `# DATA:`) in `matcher/views.py`.
+
+### Where it lives
+
+| Sprint | PDF files | Resume / job details |
+|---|---|---|
+| **1 (now)** | Memory only (Django uses a temp file if it's over 2.5MB), deleted after the request | Not saved |
+| **2 (planned)** | `media/uploads/` | `data/candidates.json` and `data/jobs.json` |
+
+`data/candidates.json` and `data/jobs.json` already exist with sample
+records showing the planned format (lists of JSON objects):
+
+```json
+{
+  "candidate_id": "C001",
+  "filename": "candidate_01.pdf",
+  "name": "John Tan",
+  "skills": ["Python", "Django", "SQL", "REST API"],
+  "location": "Central",
+  "work_preferences": { "wfh": true, "flexible_hours": true }
+}
+```
+
+`db.sqlite3` is **not** used for app data — only Django's own internal
+tables. It is git-ignored, as are `media/uploads/*` and `.env`.
 
 ---
 
 ## Project structure
 
 ```text
-resume_matcher/
+INF1103_Group-3_Assgn1/
 ├── manage.py
 ├── requirements.txt
 ├── .env.example
+├── .gitignore
 ├── config/                    # Django project settings/urls/wsgi
 ├── data/                      # Sample CSV/JSON (wired up in Sprint 2)
 ├── media/uploads/             # Uploaded files land here in later sprints
 └── matcher/
     ├── views.py                # Thin views: validate input, render templates
     ├── urls.py
-    ├── forms.py                 # Upload + preference form validation
     ├── models.py                 # Empty — no ORM models (see file for why)
     ├── dummy_data.py              # Sprint 1 stand-in for real records
     ├── tests.py
     ├── managers/                  # Sprint 2-4 placeholders (see each file)
-    │   ├── io_manager.py
+    │   ├── io_manager.py          # Upload + preference forms and validation
     │   ├── data_manager.py
     │   ├── logic_manager.py
     │   └── ai_manager.py
@@ -149,9 +282,10 @@ resume_matcher/
 
 ## Architecture notes carried through all sprints
 
-- **I/O Manager** — the only place `print()`/terminal I/O is allowed;
-  in a Django app this mostly means: the only place that formats
-  user-facing messages and validation errors.
+- **I/O Manager** — handles all user input and output: the upload and
+  preference forms, file validation, and (later) formatting results and
+  user-facing error messages. The only place `print()`/terminal I/O is
+  allowed.
 - **AI Manager** — zero business logic. Prompt building, API calls,
   schema validation, retries only.
 - **Logic Manager** — the domain brain. Scoring, the multi-condition
@@ -160,8 +294,9 @@ resume_matcher/
 - **Data Manager** — the only place that reads/writes `data/*.json`
   (or `.csv`). Handles missing/corrupt files without crashing.
 
-Each manager is a placeholder module right now with a docstring
-explaining what it will own — see `matcher/managers/`.
+The I/O Manager is already in use (Sprint 1 forms and validation). The
+other managers are placeholders with a docstring and TODOs for their
+sprint — see `matcher/managers/`.
 
 ---
 
