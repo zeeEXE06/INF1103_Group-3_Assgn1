@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Virtual environment
+.venv/
+venv/
+
+# Secrets (copy .env.example to .env instead)
+.env
+
+# Django
+db.sqlite3
+media/uploads/*
+!media/uploads/.gitkeep
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/

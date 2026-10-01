@@ -1,9 +1,9 @@
 """
-Sprint 1 tests: UI is reachable and basic upload validation works.
+Sprint 1 tests: pages load and upload checks work.
 
-Later sprints add tests for the Data/AI/Logic Managers per the spec's
-testing requirements (PDF validation edge cases, save/load, corrupt
-data handling, schema validation, scoring, ranking, mocked AI calls).
+TODO (Sprint 2): save/load, missing and broken file tests
+TODO (Sprint 3): scoring, "Strong Match" rule and ranking tests
+TODO (Sprint 4): AI response checks and mocked AI call tests
 """
 
 import io
@@ -80,6 +80,7 @@ class JobSeekerWorkflowTests(TestCase):
                 "work_arrangement": "wfh",
                 "locations": ["central", "north"],
                 "working_hours": "flexible",
+                "industry": "tech",
             },
         )
         self.assertRedirects(response, reverse("matcher:job_results"))

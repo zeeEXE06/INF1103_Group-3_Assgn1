@@ -22,7 +22,7 @@ What's real in this sprint:
 - Employer: upload a job posting PDF + multiple candidate resume PDFs
   (drag-and-drop, validated: must be `.pdf`, non-empty, under 10MB)
 - Job seeker: upload a resume PDF + set work arrangement / location(s) /
-  working hours preferences
+  working hours / industry preferences
 - Both results pages: ranked cards with match score, matched/missing
   skills, compatibility checks, empty states
 - 10 automated tests covering page loads, upload validation, and
@@ -112,22 +112,22 @@ You should see `Ran 10 tests ... OK`.
 ## Project structure
 
 ```text
-resume_matcher/
+INF1103_Group-3_Assgn1/
 ├── manage.py
 ├── requirements.txt
 ├── .env.example
+├── .gitignore
 ├── config/                    # Django project settings/urls/wsgi
 ├── data/                      # Sample CSV/JSON (wired up in Sprint 2)
 ├── media/uploads/             # Uploaded files land here in later sprints
 └── matcher/
     ├── views.py                # Thin views: validate input, render templates
     ├── urls.py
-    ├── forms.py                 # Upload + preference form validation
     ├── models.py                 # Empty — no ORM models (see file for why)
     ├── dummy_data.py              # Sprint 1 stand-in for real records
     ├── tests.py
     ├── managers/                  # Sprint 2-4 placeholders (see each file)
-    │   ├── io_manager.py
+    │   ├── io_manager.py          # Upload + preference forms and validation
     │   ├── data_manager.py
     │   ├── logic_manager.py
     │   └── ai_manager.py
@@ -149,9 +149,10 @@ resume_matcher/
 
 ## Architecture notes carried through all sprints
 
-- **I/O Manager** — the only place `print()`/terminal I/O is allowed;
-  in a Django app this mostly means: the only place that formats
-  user-facing messages and validation errors.
+- **I/O Manager** — handles all user input and output: the upload and
+  preference forms, file validation, and (later) formatting results and
+  user-facing error messages. The only place `print()`/terminal I/O is
+  allowed.
 - **AI Manager** — zero business logic. Prompt building, API calls,
   schema validation, retries only.
 - **Logic Manager** — the domain brain. Scoring, the multi-condition
@@ -160,8 +161,9 @@ resume_matcher/
 - **Data Manager** — the only place that reads/writes `data/*.json`
   (or `.csv`). Handles missing/corrupt files without crashing.
 
-Each manager is a placeholder module right now with a docstring
-explaining what it will own — see `matcher/managers/`.
+The I/O Manager is already in use (Sprint 1 forms and validation). The
+other managers are placeholders with a docstring and TODOs for their
+sprint — see `matcher/managers/`.
 
 ---
 

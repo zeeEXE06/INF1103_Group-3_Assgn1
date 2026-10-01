@@ -1,8 +1,8 @@
 """
-PDF service — Sprint 2 placeholder.
+PDF service - reads the text out of uploaded PDFs.
 
-Not implemented yet. Will extract text from uploaded PDFs (job
-descriptions, resumes) for the Data Manager / AI Manager pipeline.
-Sprint 1 validates that an upload *is* a PDF (matcher/forms.py) but
-does not read its contents.
+Sprint 1: not built yet. Uploads are only checked to be PDFs (io_manager.py).
+Sprint 2: extract text from resumes and job descriptions.
 """
+
+# TODO (Sprint 2): extract_text()

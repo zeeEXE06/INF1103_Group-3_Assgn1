@@ -97,6 +97,23 @@
             {% endif %}
         </fieldset>
 
+        <fieldset class="form-section">
+            <legend>
+                <span class="form-section__num">5</span>
+                Preferred industry
+            </legend>
+            <select name="{{ form.industry.html_name }}" id="{{ form.industry.id_for_label }}" class="select-box">
+                {% for value, label in form.industry.field.choices %}
+                <option value="{{ value }}" {% if form.industry.value == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            {% if form.industry.errors %}
+            <ul class="field-errors">
+                {% for error in form.industry.errors %}<li>{{ error }}</li>{% endfor %}
+            </ul>
+            {% endif %}
+        </fieldset>
+
         <div class="form-actions">
             <button type="submit" class="btn btn--primary btn--large" data-submit-btn>
                 <span data-btn-label>Find matching jobs</span>
