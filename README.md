@@ -25,8 +25,8 @@ What's real in this sprint:
   working hours / industry preferences
 - Both results pages: ranked cards with match score, matched/missing
   skills, compatibility checks, empty states
-- 10 automated tests covering page loads, upload validation, and
-  successful-submission redirects
+- 12 automated tests covering page loads, upload validation,
+  successful-submission redirects, and the debug/live data mode toggle
 
 What's **not** real yet (by design — later sprints):
 
@@ -90,6 +90,15 @@ copy .env.example .env
 The defaults in `.env.example` work as-is for Sprint 1 — nothing needs
 to be filled in yet (no AI API key is required until Sprint 4).
 
+**Data mode toggle** — set `DATA_MODE` in `.env`:
+
+| Value | Results pages show |
+|---|---|
+| `debug` (default) | Fixed sample data from `matcher/dummy_data.py` |
+| `live` | Real saved data (empty until Sprint 2 is built) |
+
+Restart `runserver` after changing it.
+
 ### 6. Run the app
 
 ```bash
@@ -105,7 +114,7 @@ Open **http://127.0.0.1:8000/** in your browser.
 python manage.py test matcher
 ```
 
-You should see `Ran 10 tests ... OK`.
+You should see `Ran 12 tests ... OK`.
 
 ---
 

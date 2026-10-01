@@ -2,18 +2,44 @@
 Views - each page checks the input and shows a template.
 
 Sprint 1: uploads are checked but not saved. Results pages use sample data
-from dummy_data.py.
+from dummy_data.py in debug mode, or show nothing in live mode
+(see DATA_MODE in config/settings.py).
 Sprint 2: save the uploaded data with the Data Manager.
 Sprint 3: score and rank results with the Logic Manager.
 Sprint 4: analyse resumes and jobs with the AI Manager.
 """
 
+from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.shortcuts import redirect, render
 
 from .dummy_data import sample_ranked_candidates, sample_ranked_jobs
 from .managers.io_manager import JobPostingForm, ResumeUploadForm, validate_pdf_file
+
+
+# ---------- Data mode (debug = fixed sample data, live = real data) ----------
+
+def is_live_mode():
+    return settings.DATA_MODE == "live"
+
+
+def get_ranked_candidates():
+    """Return the ranked candidates for the employer results page."""
+    if is_live_mode():
+        # TODO (Sprint 2/3): load candidates with the Data Manager and rank
+        # them with the Logic Manager. Empty until then.
+        return []
+    return sample_ranked_candidates()
+
+
+def get_ranked_jobs():
+    """Return the ranked jobs for the job seeker results page."""
+    if is_live_mode():
+        # TODO (Sprint 2/3): load jobs with the Data Manager and rank
+        # them with the Logic Manager. Empty until then.
+        return []
+    return sample_ranked_jobs()
 
 
 def landing(request):
@@ -67,8 +93,7 @@ def employer_upload(request):
 def employer_results(request):
     """Employer results: candidates ranked against the job posting."""
     # DATA: ranked candidates shown on the page
-    # TODO (Sprint 2/3): load from the Data Manager + Logic Manager instead of sample data
-    candidates = sample_ranked_candidates()
+    candidates = get_ranked_candidates()
     return render(
         request,
         "matcher/employer_results.html",
@@ -102,8 +127,7 @@ def job_seeker_upload(request):
 def job_results(request):
     """Job seeker results: jobs ranked against the resume."""
     # DATA: ranked jobs shown on the page
-    # TODO (Sprint 2/3): load from the Data Manager + Logic Manager instead of sample data
-    jobs = sample_ranked_jobs()
+    jobs = get_ranked_jobs()
     return render(
         request,
         "matcher/job_results.html",

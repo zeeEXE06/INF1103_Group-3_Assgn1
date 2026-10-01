@@ -1,3 +1,4 @@
+@charset "UTF-8";
 /* ==========================================================================
    Resume & Job Matcher - Sprint 1 UI
    Theme: navy / ice-blue, clean SaaS style. Mobile-first, no build step.
@@ -193,7 +194,7 @@ a:hover { text-decoration: underline; }
     margin-bottom: 0.4rem;
 }
 .role-card__points li::before {
-    content: "âœ“";
+    content: "✓";
     position: absolute;
     left: 0;
     color: var(--ice-600);
@@ -501,9 +502,9 @@ a:hover { text-decoration: underline; }
     position: relative;
     color: var(--slate-700);
 }
-.check-list__item--yes::before { content: "âœ“"; position: absolute; left: 0; color: var(--green-500); font-weight: 700; }
-.check-list__item--no::before { content: "âœ—"; position: absolute; left: 0; color: var(--slate-400); font-weight: 700; }
-.check-list__item--missing::before { content: "â€¢"; position: absolute; left: 0; color: var(--amber-500); font-weight: 700; }
+.check-list__item--yes::before { content: "✓"; position: absolute; left: 0; color: var(--green-500); font-weight: 700; }
+.check-list__item--no::before { content: "✗"; position: absolute; left: 0; color: var(--slate-400); font-weight: 700; }
+.check-list__item--missing::before { content: "•"; position: absolute; left: 0; color: var(--amber-500); font-weight: 700; }
 
 /* --- Empty state --------------------------------------------------------------- */
 

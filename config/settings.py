@@ -89,6 +89,11 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- Application-specific settings ------------------------------------------
 
+# Data mode toggle - set DATA_MODE in .env
+#   "debug" = results pages use the fixed sample data in dummy_data.py
+#   "live"  = results pages use real saved data (Sprint 2 onwards)
+DATA_MODE = os.environ.get("DATA_MODE", "debug")
+
 # Folder where the Data Manager saves CSV/JSON files (Sprint 2)
 DATA_DIR = BASE_DIR / "data"
 
