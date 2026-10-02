@@ -1,0 +1,71 @@
+{% extends "matcher/base.html" %}
+{% block title %}Employer — Upload Job & Candidates{% endblock %}
+
+{% block content %}
+<section class="container page-header">
+    <p class="eyebrow">Employer workflow</p>
+    <h1>Upload a job posting and candidate resumes</h1>
+    <p class="page-header__lede">
+        We'll compare every candidate resume against your job description
+        and rank them by fit. All fields are required.
+    </p>
+</section>
+
+<section class="container">
+    <form method="post" enctype="multipart/form-data" novalidate class="upload-form" id="employer-form">
+        {% csrf_token %}
+
+        <fieldset class="form-section">
+            <legend>
+                <span class="form-section__num">1</span>
+                Job posting
+            </legend>
+
+            <div class="dropzone" data-dropzone data-target="id_job_file">
+                <input type="file" name="job_file" id="id_job_file" accept=".pdf" required
+                       {% if job_form.job_file.value %}data-has-file="true"{% endif %}>
+                <div class="dropzone__prompt">
+                    <span class="dropzone__icon" aria-hidden="true">📄</span>
+                    <p><strong>Drag &amp; drop</strong> the job description PDF here, or click to browse.</p>
+                    <p class="dropzone__hint">PDF only, up to 10MB.</p>
+                </div>
+                <p class="dropzone__filename" data-filename hidden></p>
+            </div>
+            {% if job_form.job_file.errors %}
+            <ul class="field-errors">
+                {% for error in job_form.job_file.errors %}<li>{{ error }}</li>{% endfor %}
+            </ul>
+            {% endif %}
+        </fieldset>
+
+        <fieldset class="form-section">
+            <legend>
+                <span class="form-section__num">2</span>
+                Candidate resumes
+            </legend>
+
+            <div class="dropzone" data-dropzone data-target="id_candidate_files" data-multiple="true">
+                <input type="file" name="candidate_files" id="id_candidate_files" accept=".pdf" multiple required>
+                <div class="dropzone__prompt">
+                    <span class="dropzone__icon" aria-hidden="true">📁</span>
+                    <p><strong>Drag &amp; drop</strong> one or more candidate resumes here, or click to browse.</p>
+                    <p class="dropzone__hint">PDF only, up to 10MB each.</p>
+                </div>
+                <ul class="dropzone__filelist" data-filelist hidden></ul>
+            </div>
+            {% if candidate_errors %}
+            <ul class="field-errors">
+                {% for error in candidate_errors %}<li>{{ error }}</li>{% endfor %}
+            </ul>
+            {% endif %}
+        </fieldset>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn--primary btn--large" data-submit-btn>
+                <span data-btn-label>Match candidates</span>
+                <span class="spinner" data-btn-spinner hidden aria-hidden="true"></span>
+            </button>
+        </div>
+    </form>
+</section>
+{% endblock %}
