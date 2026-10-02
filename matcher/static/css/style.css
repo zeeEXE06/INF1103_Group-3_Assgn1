@@ -95,11 +95,22 @@ a:hover { text-decoration: underline; }
     font-size: 0.8rem;
 }
 
+.brand { white-space: nowrap; }
+
 .site-nav { display: flex; gap: 1.5rem; }
 .site-nav a {
     color: var(--slate-200);
     font-weight: 500;
     font-size: 0.95rem;
+    white-space: nowrap;
+}
+
+/* Phones: tighter header so the logo and links stay on one line */
+@media (max-width: 480px) {
+    .site-header__inner { gap: 1rem; }
+    .brand { font-size: 0.95rem; }
+    .site-nav { gap: 1rem; }
+    .site-nav a { font-size: 0.88rem; }
 }
 .site-nav a:hover { color: var(--white); text-decoration: none; }
 
@@ -263,7 +274,7 @@ a:hover { text-decoration: underline; }
 
 /* --- Page header (upload / results pages) ---------------------------------- */
 
-.page-header { padding: 2.5rem 0 0.5rem; }
+.page-header { padding-top: 2.5rem; padding-bottom: 0.5rem; }
 .page-header h1 { font-size: clamp(1.5rem, 3vw, 2rem); }
 .page-header__lede { max-width: 640px; color: var(--slate-500); }
 
@@ -461,7 +472,7 @@ a:hover { text-decoration: underline; }
 
 /* --- Results list ------------------------------------------------------------ */
 
-.results-list { margin: 1.5rem 0 3.5rem; display: flex; flex-direction: column; gap: 1.25rem; }
+.results-list { margin-top: 1.5rem; margin-bottom: 3.5rem; display: flex; flex-direction: column; gap: 1.25rem; }
 
 .result-card {
     background: var(--white);
@@ -470,15 +481,15 @@ a:hover { text-decoration: underline; }
     box-shadow: var(--shadow-card);
     padding: 1.5rem;
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: 2.25rem auto 1fr;
+    align-items: start;
     gap: 1.25rem;
     position: relative;
 }
+/* Phones: rank + score on the first row, details full width underneath */
+.result-card__body { grid-column: 1 / -1; min-width: 0; }
 @media (min-width: 640px) {
-    .result-card {
-        grid-template-columns: auto auto 1fr;
-        align-items: start;
-    }
+    .result-card__body { grid-column: auto; }
 }
 
 .result-card__rank {
@@ -491,7 +502,6 @@ a:hover { text-decoration: underline; }
     position: relative;
     width: 84px;
     height: 84px;
-    justify-self: center;
 }
 .score-ring { width: 84px; height: 84px; transform: rotate(-90deg); }
 .score-ring__track {
