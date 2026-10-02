@@ -405,6 +405,48 @@ a:hover { text-decoration: underline; }
 
 .form-actions { margin-top: 1.5rem; }
 
+/* Filter bar (job results page) */
+
+.filter-bar {
+    background: var(--white);
+    border: 1px solid var(--slate-200);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+    padding: 1.25rem 1.5rem;
+    margin-top: 1.5rem;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.1rem;
+}
+@media (min-width: 760px) {
+    .filter-bar { grid-template-columns: 1fr 1fr; }
+}
+.filter-bar__label {
+    display: block;
+    margin: 0 0 0.5rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--slate-500);
+}
+.filter-bar__actions {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    border-top: 1px solid var(--slate-100);
+    padding-top: 1rem;
+}
+.filter-bar__clear { font-size: 0.9rem; font-weight: 600; }
+.filter-bar__count {
+    margin: 0 0 0 auto;
+    font-size: 0.85rem;
+    color: var(--slate-500);
+}
+.choice-pill--small { padding: 0.4rem 0.8rem; font-size: 0.82rem; }
+
 /* Loading spinner */
 
 .spinner {

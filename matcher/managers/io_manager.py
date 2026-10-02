@@ -49,89 +49,92 @@ class JobPostingForm(forms.Form):
 
 # ---------- Job seeker input ----------
 
-# Options shown on the job seeker page
-WORK_ARRANGEMENT_CHOICES = [
-    ("wfh", "Work From Home"),
-    ("hybrid", "Hybrid"),
-    ("on_site", "On-site"),
-    ("flexible", "Flexible"),
-]
-
-LOCATION_CHOICES = [
-    ("north", "North"),
-    ("south", "South"),
-    ("east", "East"),
-    ("west", "West"),
-    ("central", "Central"),
-]
-
-WORKING_HOURS_CHOICES = [
-    ("standard", "Standard"),
-    ("flexible", "Flexible"),
-    ("shift", "Shift-based"),
-    ("no_preference", "No preference"),
-]
-
-INDUSTRY_CHOICES = [
-    ("", "Select an industry"),
-    ("tech", "Technology / IT"),
-    ("finance", "Finance / Banking"),
-    ("healthcare", "Healthcare"),
-    ("education", "Education"),
-    ("retail", "Retail / E-commerce"),
-    ("manufacturing", "Manufacturing"),
-    ("hospitality", "Hospitality / F&B"),
-    ("logistics", "Logistics / Supply Chain"),
-    ("media", "Media / Creative"),
-    ("other", "Other"),
-]
-
-
 class ResumeUploadForm(forms.Form):
-    """Job seeker uploads their resume and picks their preferences."""
+    """Job seeker uploads their resume."""
 
     # DATA: resume PDF (to be saved in Sprint 2)
     resume_file = forms.FileField(
         label="Your Resume (PDF)",
         widget=forms.ClearableFileInput(attrs={"accept": ".pdf"}),
     )
-    # DATA: preferred work arrangement, e.g. "wfh"
-    work_arrangement = forms.ChoiceField(
-        label="Preferred Work Arrangement",
-        choices=WORK_ARRANGEMENT_CHOICES,
-        widget=forms.RadioSelect,
-    )
-    # DATA: list of preferred locations, e.g. ["north", "central"]
-    locations = forms.MultipleChoiceField(
-        label="Preferred Location(s)",
-        choices=LOCATION_CHOICES,
-        widget=forms.CheckboxSelectMultiple,
-        required=True,
-    )
-    # DATA: preferred working hours, e.g. "flexible"
-    working_hours = forms.ChoiceField(
-        label="Preferred Working Hours",
-        choices=WORKING_HOURS_CHOICES,
-        widget=forms.RadioSelect,
-    )
-    # DATA: preferred industry, e.g. "tech"
-    industry = forms.ChoiceField(
-        label="Preferred Industry",
-        choices=INDUSTRY_CHOICES,
-        widget=forms.Select,
-        required=True,
-    )
-
-    def clean_industry(self):
-        industry = self.cleaned_data["industry"]
-        if not industry:
-            raise ValidationError("Select an industry.")
-        return industry
 
     def clean_resume_file(self):
         uploaded_file = self.cleaned_data["resume_file"]
         validate_pdf_file(uploaded_file)
         return uploaded_file
+
+
+# ---------- Job results filters ----------
+
+# Filter options on the job results page.
+# The values match what's stored on each job (e.g. job.location == "Central").
+WORK_ARRANGEMENT_CHOICES = [
+    ("WFH", "Work From Home"),
+    ("Hybrid", "Hybrid"),
+    ("On-site", "On-site"),
+    ("Flexible", "Flexible"),
+]
+
+LOCATION_CHOICES = [
+    ("North", "North"),
+    ("South", "South"),
+    ("East", "East"),
+    ("West", "West"),
+    ("Central", "Central"),
+]
+
+WORKING_HOURS_CHOICES = [
+    ("Standard", "Standard"),
+    ("Flexible", "Flexible"),
+    ("Shift-based", "Shift-based"),
+]
+
+INDUSTRY_CHOICES = [
+    ("", "All industries"),
+    ("Technology / IT", "Technology / IT"),
+    ("Finance / Banking", "Finance / Banking"),
+    ("Healthcare", "Healthcare"),
+    ("Education", "Education"),
+    ("Retail / E-commerce", "Retail / E-commerce"),
+    ("Manufacturing", "Manufacturing"),
+    ("Hospitality / F&B", "Hospitality / F&B"),
+    ("Logistics / Supply Chain", "Logistics / Supply Chain"),
+    ("Media / Creative", "Media / Creative"),
+    ("Other", "Other"),
+]
+
+
+class JobFilterForm(forms.Form):
+    """Filters on the job results page. All optional - nothing ticked = show all."""
+
+    # DATA: work arrangements to show, e.g. ["WFH", "Hybrid"]
+    work_arrangement = forms.MultipleChoiceField(
+        label="Work Arrangement",
+        choices=WORK_ARRANGEMENT_CHOICES,
+        widget=forms.CheckboxSelectMultiple,
+        required=False,
+    )
+    # DATA: locations to show, e.g. ["North", "Central"]
+    locations = forms.MultipleChoiceField(
+        label="Location(s)",
+        choices=LOCATION_CHOICES,
+        widget=forms.CheckboxSelectMultiple,
+        required=False,
+    )
+    # DATA: working hours to show, e.g. ["Flexible"]
+    working_hours = forms.MultipleChoiceField(
+        label="Working Hours",
+        choices=WORKING_HOURS_CHOICES,
+        widget=forms.CheckboxSelectMultiple,
+        required=False,
+    )
+    # DATA: industry to show, e.g. "Technology / IT" ("" = all)
+    industry = forms.ChoiceField(
+        label="Industry",
+        choices=INDUSTRY_CHOICES,
+        widget=forms.Select,
+        required=False,
+    )
 
 
 # ---------- Output ----------

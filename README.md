@@ -21,12 +21,14 @@ What's real in this sprint:
 - Landing page → Employer workflow / Job Seeker workflow
 - Employer: upload a job posting PDF + multiple candidate resume PDFs
   (drag-and-drop, validated: must be `.pdf`, non-empty, under 10MB)
-- Job seeker: upload a resume PDF + set work arrangement / location(s) /
-  working hours / industry preferences
+- Job seeker: upload a resume PDF
+- Job results page: filter jobs by work arrangement / location(s) /
+  working hours / industry
 - Both results pages: ranked cards with match score, matched/missing
   skills, compatibility checks, empty states
-- 12 automated tests covering page loads, upload validation,
-  successful-submission redirects, and the debug/live data mode toggle
+- 17 automated tests covering page loads, upload validation,
+  successful-submission redirects, the debug/live data mode toggle,
+  and the job filters
 
 What's **not** real yet (by design — later sprints):
 
@@ -112,7 +114,7 @@ Open **http://127.0.0.1:8000/** in your browser.
 python manage.py test matcher
 ```
 
-You should see `Ran 12 tests ... OK`.
+You should see `Ran 17 tests ... OK`.
 
 ---
 
@@ -208,13 +210,23 @@ DATA_MODE=debug   # or: DATA_MODE=live
 | Employer | `job_file` | `UploadedFile` (PDF) | `job.pdf` |
 | Employer | `candidate_files` | `list` of `UploadedFile` (PDFs) | `[c1.pdf, c2.pdf]` |
 | Job seeker | `resume_file` | `UploadedFile` (PDF) | `resume.pdf` |
-| Job seeker | `work_arrangement` | `str` | `"wfh"` |
-| Job seeker | `locations` | `list` of `str` | `["north", "central"]` |
-| Job seeker | `working_hours` | `str` | `"flexible"` |
-| Job seeker | `industry` | `str` | `"tech"` |
 
-These are checked in `matcher/managers/io_manager.py` and given clear
-names (marked `# DATA:`) in `matcher/views.py`.
+### Job results filters
+
+These are **not** uploaded or saved. They're picked on the job results
+page and sent in the URL (e.g. `/job-seeker/results/?locations=North`).
+Leaving a filter empty means "show all".
+
+| Filter | Python type | Example |
+|---|---|---|
+| `work_arrangement` | `list` of `str` | `["WFH", "Hybrid"]` |
+| `locations` | `list` of `str` | `["North", "Central"]` |
+| `working_hours` | `list` of `str` | `["Flexible"]` |
+| `industry` | `str` (`""` = all) | `"Technology / IT"` |
+
+All of these are checked in `matcher/managers/io_manager.py` and given
+clear names (marked `# DATA:`) in `matcher/views.py`. The filtering
+itself is done by `filter_jobs()` in `matcher/managers/logic_manager.py`.
 
 ### Where it lives
 
@@ -259,10 +271,10 @@ INF1103_Group-3_Assgn1/
     ├── models.py                 # Empty — no ORM models (see file for why)
     ├── dummy_data.py              # Sprint 1 stand-in for real records
     ├── tests.py
-    ├── managers/                  # Sprint 2-4 placeholders (see each file)
-    │   ├── io_manager.py          # Upload + preference forms and validation
+    ├── managers/                  # See each file for its sprint
+    │   ├── io_manager.py          # Upload + filter forms and validation
     │   ├── data_manager.py
-    │   ├── logic_manager.py
+    │   ├── logic_manager.py       # Job filtering (scoring/ranking: Sprint 3)
     │   └── ai_manager.py
     ├── services/                  # Sprint 2-4 placeholders
     │   ├── pdf_service.py
@@ -283,20 +295,20 @@ INF1103_Group-3_Assgn1/
 ## Architecture notes carried through all sprints
 
 - **I/O Manager** — handles all user input and output: the upload and
-  preference forms, file validation, and (later) formatting results and
+  filter forms, file validation, and (later) formatting results and
   user-facing error messages. The only place `print()`/terminal I/O is
   allowed.
 - **AI Manager** — zero business logic. Prompt building, API calls,
   schema validation, retries only.
-- **Logic Manager** — the domain brain. Scoring, the multi-condition
-  match rule, ranking. Never talks to the AI API or the filesystem
+- **Logic Manager** — the domain brain. Filtering, scoring, the
+  multi-condition match rule, ranking. Never talks to the AI API or the filesystem
   directly.
 - **Data Manager** — the only place that reads/writes `data/*.json`
   (or `.csv`). Handles missing/corrupt files without crashing.
 
-The I/O Manager is already in use (Sprint 1 forms and validation). The
-other managers are placeholders with a docstring and TODOs for their
-sprint — see `matcher/managers/`.
+The I/O Manager (forms and validation) and the Logic Manager's
+`filter_jobs()` are already in use. The rest are placeholders with a
+docstring and TODOs for their sprint — see `matcher/managers/`.
 
 ---
 
