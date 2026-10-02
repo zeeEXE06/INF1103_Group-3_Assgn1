@@ -6,7 +6,8 @@
     "required_skills": ["Python", "Django", "SQL"],
     "location": "Central",
     "work_arrangement": "WFH",
-    "working_hours": "Flexible"
+    "working_hours": "Flexible",
+    "industry": "Technology / IT"
   },
   {
     "job_id": "J002",
@@ -15,6 +16,7 @@
     "required_skills": ["Python", "PostgreSQL", "Docker", "AWS"],
     "location": "East",
     "work_arrangement": "Hybrid",
-    "working_hours": "Standard"
+    "working_hours": "Standard",
+    "industry": "Technology / IT"
   }
 ]

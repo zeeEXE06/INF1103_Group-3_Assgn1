@@ -55,7 +55,8 @@ class Job:
     required_skills: List[str]
     location: str
     work_arrangement: str  # "WFH" | "Hybrid" | "On-site" | "Flexible"
-    working_hours: str  # "Standard" | "Flexible" | "Shift-based" | "No preference"
+    working_hours: str  # "Standard" | "Flexible" | "Shift-based"
+    industry: str  # e.g. "Technology / IT" (see INDUSTRY_CHOICES in io_manager.py)
 
     # --- DATA: match results, filled in by the AI + Logic Managers (Sprint 3/4) ---
     match_score: int = 0
@@ -145,6 +146,7 @@ def sample_ranked_jobs() -> List[Job]:
             location="Central",
             work_arrangement="WFH",
             working_hours="Flexible",
+            industry="Technology / IT",
             match_score=91,
             matched_skills=["Python", "Django", "SQL"],
             missing_skills=[],
@@ -163,6 +165,7 @@ def sample_ranked_jobs() -> List[Job]:
             location="East",
             work_arrangement="Hybrid",
             working_hours="Standard",
+            industry="Technology / IT",
             match_score=68,
             matched_skills=["Python", "Docker"],
             missing_skills=["PostgreSQL", "AWS"],
@@ -181,6 +184,7 @@ def sample_ranked_jobs() -> List[Job]:
             location="West",
             work_arrangement="On-site",
             working_hours="Shift-based",
+            industry="Finance / Banking",
             match_score=35,
             matched_skills=["SQL"],
             missing_skills=["Excel", "Tableau"],

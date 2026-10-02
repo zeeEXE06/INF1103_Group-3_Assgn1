@@ -15,7 +15,13 @@ from django.core.exceptions import ValidationError
 from django.shortcuts import redirect, render
 
 from .dummy_data import sample_ranked_candidates, sample_ranked_jobs
-from .managers.io_manager import JobPostingForm, ResumeUploadForm, validate_pdf_file
+from .managers.io_manager import (
+    JobFilterForm,
+    JobPostingForm,
+    ResumeUploadForm,
+    validate_pdf_file,
+)
+from .managers.logic_manager import filter_jobs
 
 
 # ---------- Data mode (debug = fixed sample data, live = real data) ----------
@@ -102,21 +108,17 @@ def employer_results(request):
 
 
 def job_seeker_upload(request):
-    """Job seeker uploads a resume and sets their preferences."""
+    """Job seeker uploads a resume. Preferences are set as filters on the results page."""
     if request.method == "POST":
         form = ResumeUploadForm(request.POST, request.FILES)
         if form.is_valid():
-            # DATA: job seeker's resume and preferences
-            resume_file = form.cleaned_data["resume_file"]            # resume PDF
-            work_arrangement = form.cleaned_data["work_arrangement"]  # e.g. "wfh"
-            preferred_locations = form.cleaned_data["locations"]      # e.g. ["north", "central"]
-            working_hours = form.cleaned_data["working_hours"]        # e.g. "flexible"
-            industry = form.cleaned_data["industry"]                  # e.g. "tech"
+            # DATA: job seeker's resume PDF
+            resume_file = form.cleaned_data["resume_file"]
 
-            # TODO (Sprint 2): extract text from resume_file and save it with
-            # the preferences using the Data Manager
-            # TODO (Sprint 3/4): send them to the AI + Logic Managers for ranking
-            messages.success(request, "Resume and preferences received.")
+            # TODO (Sprint 2): extract text from resume_file and save it
+            # with the Data Manager
+            # TODO (Sprint 3/4): send it to the AI + Logic Managers for ranking
+            messages.success(request, "Resume received.")
             return redirect("matcher:job_results")
     else:
         form = ResumeUploadForm()
@@ -125,11 +127,32 @@ def job_seeker_upload(request):
 
 
 def job_results(request):
-    """Job seeker results: jobs ranked against the resume."""
-    # DATA: ranked jobs shown on the page
-    jobs = get_ranked_jobs()
+    """Job seeker results: jobs ranked against the resume, with filters."""
+    # DATA: all ranked jobs, before filtering
+    all_jobs = get_ranked_jobs()
+
+    # Filters come from the URL, e.g. ?locations=North&industry=Technology+%2F+IT
+    filter_form = JobFilterForm(request.GET)
+    if filter_form.is_valid():
+        # DATA: job seeker's chosen filters (empty = show all)
+        work_arrangements = filter_form.cleaned_data["work_arrangement"]  # e.g. ["WFH"]
+        locations = filter_form.cleaned_data["locations"]                 # e.g. ["North", "Central"]
+        working_hours = filter_form.cleaned_data["working_hours"]         # e.g. ["Flexible"]
+        industry = filter_form.cleaned_data["industry"]                   # e.g. "Technology / IT"
+
+        # DATA: jobs left after filtering
+        jobs = filter_jobs(all_jobs, work_arrangements, locations, working_hours, industry)
+    else:
+        # Bad filter values in the URL - ignore them and show everything
+        jobs = all_jobs
+
     return render(
         request,
         "matcher/job_results.html",
-        {"jobs": jobs},
+        {
+            "jobs": jobs,
+            "total_job_count": len(all_jobs),
+            "filter_form": filter_form,
+            "filters_applied": bool(request.GET),
+        },
     )
