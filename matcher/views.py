@@ -1,25 +1,52 @@
 """
-Views for Sprint 1 (UI).
+Views - each page checks the input and shows a template.
 
-Every view here does two things: validate/accept input, and render a
-template. There is no persistence (Data Manager, Sprint 2), no AI
-analysis (AI Manager, Sprint 4), and no scoring logic (Logic Manager,
-Sprint 3) yet — results pages are populated from matcher/dummy_data.py
-so the full click-through experience is real even though the numbers
-behind it are not.
-
-Uploaded files ARE validated (type, size, non-empty) because that
-validation is part of the UI/UX contract (clear, immediate errors),
-but the files are discarded rather than processed further — wiring
-them into the Data/AI/Logic Managers happens in later sprints.
+Sprint 1: uploads are checked but not saved. Results pages use sample data
+from dummy_data.py in debug mode, or show nothing in live mode
+(see DATA_MODE in config/settings.py).
+Sprint 2: save the uploaded data with the Data Manager.
+Sprint 3: score and rank results with the Logic Manager.
+Sprint 4: analyse resumes and jobs with the AI Manager.
 """
 
+from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.shortcuts import redirect, render
 
 from .dummy_data import sample_ranked_candidates, sample_ranked_jobs
 from .forms import JobPostingForm, ResumeUploadForm, validate_pdf_file
+from .managers.io_manager import (
+    JobFilterForm,
+    JobPostingForm,
+    ResumeUploadForm,
+    validate_pdf_file,
+)
+from .managers.logic_manager import filter_jobs
+
+
+# ---------- Data mode (debug = fixed sample data, live = real data) ----------
+
+def is_live_mode():
+    return settings.DATA_MODE == "live"
+
+
+def get_ranked_candidates():
+    """Return the ranked candidates for the employer results page."""
+    if is_live_mode():
+        # TODO (Sprint 2/3): load candidates with the Data Manager and rank
+        # them with the Logic Manager. Empty until then.
+        return []
+    return sample_ranked_candidates()
+
+
+def get_ranked_jobs():
+    """Return the ranked jobs for the job seeker results page."""
+    if is_live_mode():
+        # TODO (Sprint 2/3): load jobs with the Data Manager and rank
+        # them with the Logic Manager. Empty until then.
+        return []
+    return sample_ranked_jobs()
 
 from .managers.ai_manager import ask_ai
 
@@ -36,15 +63,15 @@ def landing(request):
 
 
 def employer_upload(request):
-    """Employer workflow: upload one job posting + one or more resumes."""
+    """Employer uploads one job posting and one or more resumes."""
     job_form = JobPostingForm()
     candidate_errors = []
-    candidate_file_count = 0
 
     if request.method == "POST":
         job_form = JobPostingForm(request.POST, request.FILES)
+
+        # DATA: list of candidate resume PDFs uploaded by the employer
         candidate_files = request.FILES.getlist("candidate_files")
-        candidate_file_count = len(candidate_files)
 
         if not candidate_files:
             candidate_errors.append("Upload at least one candidate resume (PDF).")
@@ -56,13 +83,15 @@ def employer_upload(request):
                     candidate_errors.append(exc.message)
 
         if job_form.is_valid() and not candidate_errors:
-            # Sprint 2+ will hand these files to the PDF/OCR service, then
-            # the Data Manager, AI Manager and Logic Manager in turn.
-            # For now we simply acknowledge the upload and show sample
-            # ranked results so the workflow is fully navigable.
+            # DATA: job description PDF uploaded by the employer
+            job_file = job_form.cleaned_data["job_file"]
+
+            # TODO (Sprint 2): extract text from job_file and candidate_files,
+            # then save them with the Data Manager
+            # TODO (Sprint 3/4): send them to the AI + Logic Managers for ranking
             messages.success(
                 request,
-                f"Job posting and {candidate_file_count} candidate resume(s) received.",
+                f"Job posting and {len(candidate_files)} candidate resume(s) received.",
             )
             return redirect("matcher:employer_results")
 
@@ -77,8 +106,9 @@ def employer_upload(request):
 
 
 def employer_results(request):
-    """Employer results: ranked candidates against the job posting."""
-    candidates = sample_ranked_candidates()
+    """Employer results: candidates ranked against the job posting."""
+    # DATA: ranked candidates shown on the page
+    candidates = get_ranked_candidates()
     return render(
         request,
         "matcher/employer_results.html",
@@ -105,6 +135,14 @@ def job_seeker_upload(request):
         messages.success(request, "Resume and preferences received.")
         return redirect("matcher:job_results")
 
+            # DATA: job seeker's resume PDF
+        resume_file = form.cleaned_data["resume_file"]
+
+            # TODO (Sprint 2): extract text from resume_file and save it
+            # with the Data Manager
+            # TODO (Sprint 3/4): send it to the AI + Logic Managers for ranking
+        messages.success(request, "Resume received.")
+        return redirect("matcher:job_results")
     else:
         form = ResumeUploadForm()
 
@@ -112,10 +150,32 @@ def job_seeker_upload(request):
 
 
 def job_results(request):
-    """Job seeker results: ranked job postings against the resume."""
-    jobs = sample_ranked_jobs()
+    """Job seeker results: jobs ranked against the resume, with filters."""
+    # DATA: all ranked jobs, before filtering
+    all_jobs = get_ranked_jobs()
+
+    # Filters come from the URL, e.g. ?locations=North&industry=Technology+%2F+IT
+    filter_form = JobFilterForm(request.GET)
+    if filter_form.is_valid():
+        # DATA: job seeker's chosen filters (empty = show all)
+        work_arrangements = filter_form.cleaned_data["work_arrangement"]  # e.g. ["WFH"]
+        locations = filter_form.cleaned_data["locations"]                 # e.g. ["North", "Central"]
+        working_hours = filter_form.cleaned_data["working_hours"]         # e.g. ["Flexible"]
+        industry = filter_form.cleaned_data["industry"]                   # e.g. "Technology / IT"
+
+        # DATA: jobs left after filtering
+        jobs = filter_jobs(all_jobs, work_arrangements, locations, working_hours, industry)
+    else:
+        # Bad filter values in the URL - ignore them and show everything
+        jobs = all_jobs
+
     return render(
         request,
         "matcher/job_results.html",
-        {"jobs": jobs},
+        {
+            "jobs": jobs,
+            "total_job_count": len(all_jobs),
+            "filter_form": filter_form,
+            "filters_applied": bool(request.GET),
+        },
     )

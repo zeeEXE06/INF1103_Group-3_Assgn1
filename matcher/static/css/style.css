@@ -1,5 +1,6 @@
+@charset "UTF-8";
 /* ==========================================================================
-   Resume & Job Matcher — Sprint 1 UI
+   Resume & Job Matcher - Sprint 1 UI
    Theme: navy / ice-blue, clean SaaS style. Mobile-first, no build step.
    ========================================================================== */
 
@@ -94,11 +95,22 @@ a:hover { text-decoration: underline; }
     font-size: 0.8rem;
 }
 
+.brand { white-space: nowrap; }
+
 .site-nav { display: flex; gap: 1.5rem; }
 .site-nav a {
     color: var(--slate-200);
     font-weight: 500;
     font-size: 0.95rem;
+    white-space: nowrap;
+}
+
+/* Phones: tighter header so the logo and links stay on one line */
+@media (max-width: 480px) {
+    .site-header__inner { gap: 1rem; }
+    .brand { font-size: 0.95rem; }
+    .site-nav { gap: 1rem; }
+    .site-nav a { font-size: 0.88rem; }
 }
 .site-nav a:hover { color: var(--white); text-decoration: none; }
 
@@ -262,7 +274,7 @@ a:hover { text-decoration: underline; }
 
 /* --- Page header (upload / results pages) ---------------------------------- */
 
-.page-header { padding: 2.5rem 0 0.5rem; }
+.page-header { padding-top: 2.5rem; padding-bottom: 0.5rem; }
 .page-header h1 { font-size: clamp(1.5rem, 3vw, 2rem); }
 .page-header__lede { max-width: 640px; color: var(--slate-500); }
 
@@ -376,7 +388,75 @@ a:hover { text-decoration: underline; }
 }
 .choice-pill input { accent-color: var(--ice-600); }
 
+/* Select box (e.g. Preferred Industry) */
+
+.select-box {
+    display: block;
+    width: 100%;
+    max-width: 320px;
+    padding: 0.65rem 2.25rem 0.65rem 1rem;
+    font-family: inherit;
+    font-size: 0.92rem;
+    color: var(--navy-900);
+    background-color: var(--white);
+    border: 1.5px solid var(--slate-200);
+    border-radius: var(--radius-md);
+    appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%2364748b'><path fill-rule='evenodd' d='M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.24 4.5a.75.75 0 01-1.08 0l-4.24-4.5a.75.75 0 01.02-1.06z' clip-rule='evenodd'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 16px;
+    cursor: pointer;
+    transition: border-color 0.12s ease;
+}
+.select-box:focus {
+    outline: none;
+    border-color: var(--ice-600);
+}
+
 .form-actions { margin-top: 1.5rem; }
+
+/* Filter bar (job results page) */
+
+.filter-bar {
+    background: var(--white);
+    border: 1px solid var(--slate-200);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+    padding: 1.25rem 1.5rem;
+    margin-top: 1.5rem;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.1rem;
+}
+@media (min-width: 760px) {
+    .filter-bar { grid-template-columns: 1fr 1fr; }
+}
+.filter-bar__label {
+    display: block;
+    margin: 0 0 0.5rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--slate-500);
+}
+.filter-bar__actions {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    border-top: 1px solid var(--slate-100);
+    padding-top: 1rem;
+}
+.filter-bar__clear { font-size: 0.9rem; font-weight: 600; }
+.filter-bar__count {
+    margin: 0 0 0 auto;
+    font-size: 0.85rem;
+    color: var(--slate-500);
+}
+.choice-pill--small { padding: 0.4rem 0.8rem; font-size: 0.82rem; }
 
 /* Loading spinner */
 
@@ -392,7 +472,7 @@ a:hover { text-decoration: underline; }
 
 /* --- Results list ------------------------------------------------------------ */
 
-.results-list { margin: 1.5rem 0 3.5rem; display: flex; flex-direction: column; gap: 1.25rem; }
+.results-list { margin-top: 1.5rem; margin-bottom: 3.5rem; display: flex; flex-direction: column; gap: 1.25rem; }
 
 .result-card {
     background: var(--white);
@@ -401,15 +481,15 @@ a:hover { text-decoration: underline; }
     box-shadow: var(--shadow-card);
     padding: 1.5rem;
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: 2.25rem auto 1fr;
+    align-items: start;
     gap: 1.25rem;
     position: relative;
 }
+/* Phones: rank + score on the first row, details full width underneath */
+.result-card__body { grid-column: 1 / -1; min-width: 0; }
 @media (min-width: 640px) {
-    .result-card {
-        grid-template-columns: auto auto 1fr;
-        align-items: start;
-    }
+    .result-card__body { grid-column: auto; }
 }
 
 .result-card__rank {
@@ -422,7 +502,6 @@ a:hover { text-decoration: underline; }
     position: relative;
     width: 84px;
     height: 84px;
-    justify-self: center;
 }
 .score-ring { width: 84px; height: 84px; transform: rotate(-90deg); }
 .score-ring__track {

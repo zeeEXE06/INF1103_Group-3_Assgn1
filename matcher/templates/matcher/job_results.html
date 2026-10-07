@@ -5,8 +5,67 @@
 <section class="container page-header">
     <p class="eyebrow">Job seeker workflow</p>
     <h1>Your job match results</h1>
-    <p class="page-header__lede">Ranked from strongest to weakest fit against your resume and preferences.</p>
+    <p class="page-header__lede">Ranked from strongest to weakest fit against your resume. Use the filters to narrow them down.</p>
 </section>
+
+{% if total_job_count %}
+<section class="container">
+    <form method="get" class="filter-bar" aria-label="Filter jobs">
+        <div class="filter-bar__group">
+            <p class="filter-bar__label">{{ filter_form.work_arrangement.label }}</p>
+            <div class="choice-grid">
+                {% for checkbox in filter_form.work_arrangement %}
+                <label class="choice-pill choice-pill--small">
+                    {{ checkbox.tag }}
+                    <span>{{ checkbox.choice_label }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="filter-bar__group">
+            <p class="filter-bar__label">{{ filter_form.locations.label }}</p>
+            <div class="choice-grid">
+                {% for checkbox in filter_form.locations %}
+                <label class="choice-pill choice-pill--small">
+                    {{ checkbox.tag }}
+                    <span>{{ checkbox.choice_label }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="filter-bar__group">
+            <p class="filter-bar__label">{{ filter_form.working_hours.label }}</p>
+            <div class="choice-grid">
+                {% for checkbox in filter_form.working_hours %}
+                <label class="choice-pill choice-pill--small">
+                    {{ checkbox.tag }}
+                    <span>{{ checkbox.choice_label }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="filter-bar__group">
+            <label class="filter-bar__label" for="{{ filter_form.industry.id_for_label }}">{{ filter_form.industry.label }}</label>
+            <select name="{{ filter_form.industry.html_name }}" id="{{ filter_form.industry.id_for_label }}" class="select-box">
+                {% for value, label in filter_form.industry.field.choices %}
+                <option value="{{ value }}" {% if filter_form.industry.value == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="filter-bar__actions">
+            <button type="submit" class="btn btn--primary">Apply filters</button>
+            {% if filters_applied %}
+            <a class="filter-bar__clear" href="{% url 'matcher:job_results' %}">Clear filters</a>
+            {% endif %}
+            <p class="filter-bar__count">Showing {{ jobs|length }} of {{ total_job_count }} jobs</p>
+        </div>
+    </form>
+</section>
+{% endif %}
 
 <section class="container results-list">
     {% if jobs %}
@@ -25,7 +84,7 @@
 
             <div class="result-card__body">
                 <h2>{{ job.title }}</h2>
-                <p class="result-card__company">{{ job.company }}</p>
+                <p class="result-card__company">{{ job.company }} · {{ job.industry }}</p>
                 <p class="result-card__summary">{{ job.summary }}</p>
 
                 <div class="result-grid">
@@ -67,6 +126,13 @@
             </div>
         </article>
         {% endfor %}
+    {% elif total_job_count %}
+    <div class="empty-state">
+        <p class="empty-state__icon" aria-hidden="true">🔍</p>
+        <h2>No jobs match these filters</h2>
+        <p>Try ticking more options, or clear the filters to see every match.</p>
+        <a class="btn btn--primary" href="{% url 'matcher:job_results' %}">Clear filters</a>
+    </div>
     {% else %}
     <div class="empty-state">
         <p class="empty-state__icon" aria-hidden="true">🗂️</p>

@@ -1,18 +1,8 @@
 """
-Sprint 1 placeholder data layer.
+Sample data for Sprint 1, so the results pages have something to show.
 
-These are plain Python dataclasses, NOT Django ORM models. They exist so
-the UI (views, templates) has something realistic to render before the
-Data Manager (Sprint 2) exists to load real records from CSV/JSON, and
-before the AI Manager (Sprint 4) exists to produce real match analysis.
-
-Field names deliberately mirror the structured record shapes described
-in the project spec (candidate record, AI output schema) so that when
-Sprint 2-4 land, the views barely need to change — only where the data
-comes from changes.
-
-Nothing in this file performs I/O. Loading/saving records is the Data
-Manager's job (Sprint 2); this module only defines shapes and sample data.
+Sprint 2: real records will be loaded by the Data Manager instead.
+Sprint 3/4: scores and match results will come from the Logic + AI Managers.
 """
 
 from dataclasses import dataclass, field
@@ -21,6 +11,8 @@ from typing import List
 
 @dataclass
 class WorkPreferences:
+    """DATA: a candidate's work preferences."""
+
     wfh: bool = False
     hybrid: bool = False
     on_site: bool = False
@@ -29,8 +21,9 @@ class WorkPreferences:
 
 @dataclass
 class Candidate:
-    """A job seeker's resume, once structured."""
+    """DATA: one candidate's resume details."""
 
+    # --- DATA: read from the resume (Sprint 2) ---
     candidate_id: str
     filename: str
     name: str
@@ -40,7 +33,7 @@ class Candidate:
     location: str
     work_preferences: WorkPreferences
 
-    # --- Fields populated later by the AI Manager + Logic Manager ---
+    # --- DATA: match results, filled in by the AI + Logic Managers (Sprint 3/4) ---
     match_score: int = 0
     matched_skills: List[str] = field(default_factory=list)
     missing_skills: List[str] = field(default_factory=list)
@@ -53,17 +46,19 @@ class Candidate:
 
 @dataclass
 class Job:
-    """A job posting, once structured."""
+    """DATA: one job posting's details."""
 
+    # --- DATA: read from the job description (Sprint 2) ---
     job_id: str
     title: str
     company: str
     required_skills: List[str]
     location: str
     work_arrangement: str  # "WFH" | "Hybrid" | "On-site" | "Flexible"
-    working_hours: str  # "Standard" | "Flexible" | "Shift-based" | "No preference"
+    working_hours: str  # "Standard" | "Flexible" | "Shift-based"
+    industry: str  # e.g. "Technology / IT" (see INDUSTRY_CHOICES in io_manager.py)
 
-    # --- Fields populated later by the AI Manager + Logic Manager ---
+    # --- DATA: match results, filled in by the AI + Logic Managers (Sprint 3/4) ---
     match_score: int = 0
     matched_skills: List[str] = field(default_factory=list)
     missing_skills: List[str] = field(default_factory=list)
@@ -76,8 +71,9 @@ class Job:
 
 
 def sample_ranked_candidates() -> List[Candidate]:
-    """Hardcoded, already-ranked candidates for the employer results page."""
+    """Sample ranked candidates for the employer results page."""
 
+    # DATA: list of sample candidates
     candidates = [
         Candidate(
             candidate_id="C001",
@@ -138,8 +134,9 @@ def sample_ranked_candidates() -> List[Candidate]:
 
 
 def sample_ranked_jobs() -> List[Job]:
-    """Hardcoded, already-ranked jobs for the job seeker results page."""
+    """Sample ranked jobs for the job seeker results page."""
 
+    # DATA: list of sample jobs
     jobs = [
         Job(
             job_id="J001",
@@ -149,6 +146,7 @@ def sample_ranked_jobs() -> List[Job]:
             location="Central",
             work_arrangement="WFH",
             working_hours="Flexible",
+            industry="Technology / IT",
             match_score=91,
             matched_skills=["Python", "Django", "SQL"],
             missing_skills=[],
@@ -167,6 +165,7 @@ def sample_ranked_jobs() -> List[Job]:
             location="East",
             work_arrangement="Hybrid",
             working_hours="Standard",
+            industry="Technology / IT",
             match_score=68,
             matched_skills=["Python", "Docker"],
             missing_skills=["PostgreSQL", "AWS"],
@@ -185,6 +184,7 @@ def sample_ranked_jobs() -> List[Job]:
             location="West",
             work_arrangement="On-site",
             working_hours="Shift-based",
+            industry="Finance / Banking",
             match_score=35,
             matched_skills=["SQL"],
             missing_skills=["Excel", "Tableau"],

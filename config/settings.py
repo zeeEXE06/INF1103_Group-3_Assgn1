@@ -1,19 +1,11 @@
 """
 Django settings for the Resume & Job Matcher project.
-
-Sprint 1 (UI): only the pieces needed to render pages are wired up.
-No database models, no AI Manager, no Data Manager persistence yet —
-those arrive in later sprints. Settings for them (env vars, upload
-limits) are stubbed in now so later sprints don't have to touch this
-file much.
 """
 
 import os
 from pathlib import Path
 
-# Load variables from a .env file if python-dotenv is installed and a
-# .env file exists. This keeps secrets (AI API keys, later on) out of
-# source control. Safe to skip silently in environments without it.
+# Load settings from the .env file (keeps API keys out of the code)
 try:
     from dotenv import load_dotenv
 
@@ -63,6 +55,7 @@ TEMPLATES = [
             "context_processors": [
                 "django.template.context_processors.request",
                 "django.contrib.messages.context_processors.messages",
+                "matcher.context_processors.static_version",
             ],
         },
     },
@@ -70,12 +63,8 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-# No database is configured yet on purpose: Sprint 1 (UI) runs entirely
-# on in-memory dummy data (see matcher/dummy_data.py). Sprint 2 adds the
-# Data Manager, reading/writing CSV or JSON files under DATA_DIR below.
-# Django still needs *a* database configured to boot management commands
-# such as `runserver`, so a local SQLite file is used only for Django's
-# own internal tables (sessions, etc.) — application data does not live here.
+# Only used by Django itself (sessions etc.). Our app data is saved as
+# CSV/JSON files in data/ by the Data Manager (Sprint 2).
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
@@ -101,16 +90,18 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- Application-specific settings ------------------------------------------
 
-# Where the Data Manager will read/write CSV or JSON (Sprint 2).
+# Data mode toggle - set DATA_MODE in .env
+#   "debug" = results pages use the fixed sample data in dummy_data.py
+#   "live"  = results pages use real saved data (Sprint 2 onwards)
+DATA_MODE = os.environ.get("DATA_MODE", "debug")
+
+# Folder where the Data Manager saves CSV/JSON files (Sprint 2)
 DATA_DIR = BASE_DIR / "data"
 
-# Upload validation limits (enforced by forms in later sprints; the
-# limits live here so they're configured in one place, not scattered
-# through views).
+# Upload limits, checked by the I/O Manager
 MAX_UPLOAD_SIZE_MB = int(os.environ.get("MAX_UPLOAD_SIZE_MB", "10"))
 ALLOWED_UPLOAD_EXTENSIONS = [".pdf"]
 
-# AI Manager configuration (Sprint 4). Left as env-driven stubs now so
-# no code changes are needed later beyond the AI Manager itself.
+# AI Manager settings (Sprint 4)
 AI_MODE = os.environ.get("AI_MODE", "mock")  # "mock" or "live"
 AI_API_KEY = os.environ.get("AI_API_KEY", "")

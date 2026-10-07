@@ -1,9 +1,6 @@
 """
-No Django ORM models yet.
+No database models.
 
-Per the project's sprint plan, persistence is handled by a Data Manager
-(matcher/managers/data_manager.py, Sprint 2) that reads/writes CSV or
-JSON files directly — not Django's ORM/database layer. This file is
-kept as a placeholder (Django expects an app to have a models module)
-and stays empty unless a future decision moves storage onto the ORM.
+Data is saved as CSV/JSON files by the Data Manager (Sprint 2), not in
+Django's database. Django needs this file to exist, so it stays empty.
 """
