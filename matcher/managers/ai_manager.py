@@ -1,14 +1,27 @@
-"""
-AI Manager - talks to the AI API.
+import os
+from dotenv import load_dotenv
+from openai import OpenAI
 
-Sprint 1-3: not built yet.
-Sprint 4: build the prompt, call the AI (mock mode first), check the JSON
-          reply, retry if it is broken, and log errors without crashing.
-          Uses AI_MODE and AI_API_KEY from config/settings.py.
+load_dotenv()
 
-No scoring or business logic here - that goes in logic_manager.py.
-"""
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.getenv("OPENROUTER_API_KEY")
+)
 
-# TODO (Sprint 4): build_prompt()
-# TODO (Sprint 4): call_ai()
-# TODO (Sprint 4): validate_response()
+def ask_ai(prompt, uploaded_file):
+    print("AI Manager Uploaded File: ", uploaded_file.name)
+    print("FILE TYPE:", uploaded_file.content_type)
+    print("FILE SIZE:", uploaded_file.size)
+    #response = client.chat.completions.create(
+    #    model="openrouter/free",
+    #    messages=[
+    #        {
+    #            "role": "user",
+    #            "content": prompt
+    #        }
+    #    ]
+    #)
+    # debug if API key is not set
+    print(os.getenv("OPENROUTER_API_KEY") is not None)
+    return "PDF received"

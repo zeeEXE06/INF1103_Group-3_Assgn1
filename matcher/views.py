@@ -15,6 +15,7 @@ from django.core.exceptions import ValidationError
 from django.shortcuts import redirect, render
 
 from .dummy_data import sample_ranked_candidates, sample_ranked_jobs
+from .forms import JobPostingForm, ResumeUploadForm, validate_pdf_file
 from .managers.io_manager import (
     JobFilterForm,
     JobPostingForm,
@@ -47,6 +48,14 @@ def get_ranked_jobs():
         return []
     return sample_ranked_jobs()
 
+from .managers.ai_manager import ask_ai
+
+#def test_ai(request):
+#    result = ask_ai("Verify integration with AI and return a simple response.")
+    
+#    return render(request, "matcher/base.html", {
+#        "result": result
+#    })
 
 def landing(request):
     """Landing page: choose Job Seeker or Employer."""
@@ -108,18 +117,32 @@ def employer_results(request):
 
 
 def job_seeker_upload(request):
-    """Job seeker uploads a resume. Preferences are set as filters on the results page."""
+    print("REQUEST METHOD:", request.method)
+    """Job seeker workflow: upload resume + set preferences."""
     if request.method == "POST":
         form = ResumeUploadForm(request.POST, request.FILES)
+
         if form.is_valid():
+            uploaded_file = form.cleaned_data["resume_file"]
+
+            result = ask_ai(
+        "Read this resume and prepare to analyze it.",
+            uploaded_file
+        )
+
+        print("AI RESULT:", result)
+
+        messages.success(request, "Resume and preferences received.")
+        return redirect("matcher:job_results")
+
             # DATA: job seeker's resume PDF
-            resume_file = form.cleaned_data["resume_file"]
+        resume_file = form.cleaned_data["resume_file"]
 
             # TODO (Sprint 2): extract text from resume_file and save it
             # with the Data Manager
             # TODO (Sprint 3/4): send it to the AI + Logic Managers for ranking
-            messages.success(request, "Resume received.")
-            return redirect("matcher:job_results")
+        messages.success(request, "Resume received.")
+        return redirect("matcher:job_results")
     else:
         form = ResumeUploadForm()
 
