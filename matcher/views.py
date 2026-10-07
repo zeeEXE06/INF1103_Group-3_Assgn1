@@ -87,14 +87,24 @@ def employer_results(request):
 
 
 def job_seeker_upload(request):
+    print("REQUEST METHOD:", request.method)
     """Job seeker workflow: upload resume + set preferences."""
     if request.method == "POST":
         form = ResumeUploadForm(request.POST, request.FILES)
+
         if form.is_valid():
-            # Sprint 2+ will structure the resume and store preferences via
-            # the Data Manager, then run it through AI + Logic Managers.
-            messages.success(request, "Resume and preferences received.")
-            return redirect("matcher:job_results")
+            uploaded_file = form.cleaned_data["resume_file"]
+
+            result = ask_ai(
+        "Read this resume and prepare to analyze it.",
+            uploaded_file
+        )
+
+        print("AI RESULT:", result)
+
+        messages.success(request, "Resume and preferences received.")
+        return redirect("matcher:job_results")
+
     else:
         form = ResumeUploadForm()
 
