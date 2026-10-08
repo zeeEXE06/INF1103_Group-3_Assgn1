@@ -125,10 +125,44 @@ def job_seeker_upload(request):
         if form.is_valid():
             uploaded_file = form.cleaned_data["resume_file"]
 
-            result = ask_ai(
-        "Read this resume and prepare to analyze it.",
+        result = ask_ai(
+            """
+            Analyze the uploaded resume.
+
+            Extract the candidate's education information.
+
+            Look for information such as:
+            - Degrees
+            - Diplomas
+            - Certificates
+            - Fields of study
+            - Schools or universities
+            - Dates of study
+
+            Return ONLY valid JSON in this format:
+
+            {
+                "education": [
+                    {
+                        "qualification": "",
+                        "institution": "",
+                        "field_of_study": "",
+                        "start_date": "",
+                        "end_date": ""
+                    }
+                ]
+            }
+
+            If no education information is found, return:
+            {
+                "education": []
+            }
+
+            Do not invent information that is not present in the resume.
+            """,
             uploaded_file
-        )
+            )
+        
 
         print("AI RESULT:", result)
 

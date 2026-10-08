@@ -1,4 +1,6 @@
 import os
+import base64
+import json
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -10,18 +12,28 @@ client = OpenAI(
 )
 
 def ask_ai(prompt, uploaded_file):
-    print("AI Manager Uploaded File: ", uploaded_file.name)
-    print("FILE TYPE:", uploaded_file.content_type)
-    print("FILE SIZE:", uploaded_file.size)
-    #response = client.chat.completions.create(
-    #    model="openrouter/free",
-    #    messages=[
-    #        {
-    #            "role": "user",
-    #            "content": prompt
-    #        }
-    #    ]
-    #)
-    # debug if API key is not set
-    print(os.getenv("OPENROUTER_API_KEY") is not None)
-    return "PDF received"
+    pdf_bytes = uploaded_file.file.read()
+    pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
+    response = client.chat.completions.create(
+        model="openrouter/free",
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": prompt
+                    },
+                    {
+                        "type": "file",
+                        "file": {
+                            "filename": uploaded_file.name,
+                            "file_data": "data:application/pdf;base64," + pdf_base64
+                        }
+                    }
+                ]
+            }
+        ]
+    )
+
+    return response.choices[0].message.content
