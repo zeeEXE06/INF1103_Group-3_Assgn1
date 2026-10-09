@@ -5,8 +5,8 @@
 <section class="container page-header">
     <p class="eyebrow">Job seeker workflow</p>
     <h1>Your job match results</h1>
-    {% if job_suggestions %}
-    <p class="page-header__lede">Job titles that suit your resume, best fit first. Open one to see the current openings on Jobstreet.</p>
+    {% if show_jobstreet_links %}
+    <p class="page-header__lede">Job titles that suit your resume, best fit first. Use the filters to narrow them down, then open one to see the current openings on Jobstreet.</p>
     {% else %}
     <p class="page-header__lede">Ranked from strongest to weakest fit against your resume. Use the filters to narrow them down.</p>
     {% endif %}
@@ -72,10 +72,19 @@
 {% endif %}
 
 <section class="container results-list">
-    {% if job_suggestions %}
-        {% for job in job_suggestions %}
-        <article class="result-card result-card--no-score">
+    {% if jobs and show_jobstreet_links %}
+        {% for job in jobs %}
+        <article class="result-card">
             <div class="result-card__rank">#{{ job.rank }}</div>
+
+            <div class="result-card__score" style="--score: {{ job.match_score }}">
+                <svg viewBox="0 0 120 120" class="score-ring" aria-hidden="true">
+                    <circle class="score-ring__track" cx="60" cy="60" r="52"></circle>
+                    <circle class="score-ring__fill" cx="60" cy="60" r="52" pathLength="100"
+                            style="stroke-dasharray: {{ job.match_score }} 100;"></circle>
+                </svg>
+                <span class="score-ring__value">{{ job.match_score }}%</span>
+            </div>
 
             <div class="result-card__body">
                 <h2>{{ job.title }}</h2>
@@ -86,16 +95,27 @@
                 <p class="result-card__summary">{{ job.match_reason }}</p>
                 {% endif %}
 
-                {% if job.matched_skills %}
-                <div class="result-block">
-                    <h3>Your Matching Skills</h3>
-                    <ul class="check-list">
-                        {% for skill in job.matched_skills %}
-                        <li class="check-list__item check-list__item--yes">{{ skill }}</li>
-                        {% endfor %}
-                    </ul>
+                <div class="result-grid">
+                    {% if job.matched_skills %}
+                    <div class="result-block">
+                        <h3>Your Matching Skills</h3>
+                        <ul class="check-list">
+                            {% for skill in job.matched_skills %}
+                            <li class="check-list__item check-list__item--yes">{{ skill }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+
+                    <div class="result-block">
+                        <h3>Typical for this role</h3>
+                        <ul class="check-list">
+                            {% if job.location %}<li class="check-list__item">Location: {{ job.location }}</li>{% endif %}
+                            {% if job.work_arrangement %}<li class="check-list__item">{{ job.work_arrangement }}</li>{% endif %}
+                            {% if job.working_hours %}<li class="check-list__item">{{ job.working_hours }} hours</li>{% endif %}
+                        </ul>
+                    </div>
                 </div>
-                {% endif %}
 
                 <a class="btn btn--primary result-card__link" href="{{ job.url }}"
                    target="_blank" rel="noopener noreferrer">View jobs on Jobstreet ↗</a>
