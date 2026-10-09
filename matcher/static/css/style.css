@@ -526,6 +526,13 @@ a:hover { text-decoration: underline; }
     color: var(--navy-950);
 }
 
+/* AI job suggestions have no score ring - just rank + details */
+.result-card--no-score { grid-template-columns: 2.25rem 1fr; }
+@media (max-width: 639px) {
+    .result-card--no-score .result-card__body { grid-column: auto; }
+}
+.result-card__link { margin-top: 1rem; display: inline-block; }
+
 .result-card__body h2 { font-size: 1.2rem; margin-bottom: 0.1rem; }
 .result-card__company { color: var(--slate-500); font-size: 0.88rem; margin-bottom: 0.5rem; }
 .result-card__summary { font-size: 0.92rem; margin-bottom: 1rem; }
