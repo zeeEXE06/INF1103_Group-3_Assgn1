@@ -104,4 +104,5 @@ ALLOWED_UPLOAD_EXTENSIONS = [".pdf"]
 
 # AI Manager settings (Sprint 4)
 AI_MODE = os.environ.get("AI_MODE", "mock")  # "mock" or "live"
-AI_API_KEY = os.environ.get("AI_API_KEY", "")
+# OpenRouter key. OPENROUTER_API_KEY is also accepted so older .env files still work.
+AI_API_KEY = os.environ.get("AI_API_KEY") or os.environ.get("OPENROUTER_API_KEY", "")
