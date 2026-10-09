@@ -9,13 +9,17 @@ Sprint 3: score and rank results with the Logic Manager.
 Sprint 4: analyse resumes and jobs with the AI Manager.
 """
 
+import logging
+
 from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.shortcuts import redirect, render
+from django.utils import timezone
 
 from .dummy_data import sample_ranked_candidates, sample_ranked_jobs
-from .forms import JobPostingForm, ResumeUploadForm, validate_pdf_file
+from .managers.ai_manager import ask_ai, parse_json_reply
+from .managers.data_manager import save_record
 from .managers.io_manager import (
     JobFilterForm,
     JobPostingForm,
@@ -23,6 +27,68 @@ from .managers.io_manager import (
     validate_pdf_file,
 )
 from .managers.logic_manager import filter_jobs
+
+logger = logging.getLogger(__name__)
+
+
+# Prompt sent to the AI Manager with the job seeker's resume PDF
+RESUME_EXTRACTION_PROMPT = """
+Analyze the uploaded resume.
+
+Extract the candidate's education & experience information.
+
+Look for education information such as:
+- Degrees
+- Diplomas
+- Certificates
+- Fields of study
+- Schools or universities
+- Dates of study
+
+Look for experience information such as:
+- Job titles
+- Companies
+- Dates of employment
+
+Look for skills also and fill them into JSON accordingly.
+
+Return ONLY valid JSON in this format:
+
+{
+    "education": [
+        {
+            "qualification": "",
+            "institution": "",
+            "field_of_study": "",
+            "start_date": "",
+            "end_date": ""
+        }
+    ],
+    "experience": [
+        {
+            "job_title": "",
+            "company": "",
+            "start_date": "",
+            "end_date": ""
+        }
+    ],
+    "skills": [
+        {
+            "skill": ""
+        }
+    ]
+}
+
+If none of the information is found, return the following JSON with
+empty arrays if applicable:
+{
+    "education": [],
+    "experience": [],
+    "skills": []
+}
+
+Do not invent information that is not present in the resume.
+"""
 
 
 # ---------- Data mode (debug = fixed sample data, live = real data) ----------
@@ -48,14 +114,6 @@ def get_ranked_jobs():
         return []
     return sample_ranked_jobs()
 
-from .managers.ai_manager import ask_ai
-
-#def test_ai(request):
-#    result = ask_ai("Verify integration with AI and return a simple response.")
-    
-#    return render(request, "matcher/base.html", {
-#        "result": result
-#    })
 
 def landing(request):
     """Landing page: choose Job Seeker or Employer."""
@@ -117,90 +175,43 @@ def employer_results(request):
 
 
 def job_seeker_upload(request):
-    print("REQUEST METHOD:", request.method)
-    """Job seeker workflow: upload resume + set preferences."""
+    """Job seeker uploads a resume. Preferences are set as filters on the results page."""
     if request.method == "POST":
         form = ResumeUploadForm(request.POST, request.FILES)
-
         if form.is_valid():
-            uploaded_file = form.cleaned_data["resume_file"]
-
-        result = ask_ai(
-            """
-            Analyze the uploaded resume.
-
-            Extract the candidate's education & experience information.
-
-            Look for educationinformation such as:
-            - Degrees
-            - Diplomas
-            - Certificates
-            - Fields of study
-            - Schools or universities
-            - Dates of study
-            
-            Look for experience information such as:
-            - Job titles
-            - Companies
-            - Dates of employment
-            
-            Look for skills also and fill them into JSON accordingly.
-
-            Return ONLY valid JSON in this format:
-
-            {
-                "education": [
-                    {
-                        "qualification": "",
-                        "institution": "",
-                        "field_of_study": "",
-                        "start_date": "",
-                        "end_date": ""
-                    }
-                ]
-                "experience": [
-                    {
-                        "job_title": "",
-                        "company": "",
-                        "start_date": "",
-                        "end_date": ""
-                    }
-                ]
-                "skills": [
-                    {
-                        "skill": ""
-                    }
-                ]
-            }
-
-            If none of the information is found, return:
-            the following json with empty arrays if applicable:
-            {
-                "education": [],
-                "experience": [],
-                "skills": []
-            }
-            
-
-            Do not invent information that is not present in the resume.
-            """,
-            uploaded_file
-            )
-        
-
-        print("AI RESULT:", result)
-
-        messages.success(request, "Resume and preferences received.")
-        return redirect("matcher:job_results")
-
             # DATA: job seeker's resume PDF
-        resume_file = form.cleaned_data["resume_file"]
+            resume_file = form.cleaned_data["resume_file"]
 
-            # TODO (Sprint 2): extract text from resume_file and save it
-            # with the Data Manager
-            # TODO (Sprint 3/4): send it to the AI + Logic Managers for ranking
-        messages.success(request, "Resume received.")
-        return redirect("matcher:job_results")
+            # DATA: AI Manager's reply as JSON text (mock reply unless AI_MODE=live)
+            try:
+                ai_result = ask_ai(RESUME_EXTRACTION_PROMPT, resume_file)
+            except Exception:
+                # Bad/missing API key, network down, rate limit, etc.
+                logger.exception("AI call failed for %s", resume_file.name)
+                messages.error(
+                    request,
+                    "The AI service is unavailable right now. Please try again later.",
+                )
+                return render(request, "matcher/job_seeker.html", {"form": form})
+
+            # DATA: education/experience/skills parsed from the reply (None if broken)
+            resume_data = parse_json_reply(ai_result)
+            if resume_data is None:
+                messages.error(request, "Could not read the resume. Please try again.")
+                return render(request, "matcher/job_seeker.html", {"form": form})
+
+            # DATA: saved resume record, e.g. {"id": "R001", "filename": ..., "skills": [...]}
+            save_record("resumes", {
+                "filename": resume_file.name,
+                "uploaded_at": timezone.now().isoformat(timespec="seconds"),
+                "education": resume_data.get("education", []),
+                "experience": resume_data.get("experience", []),
+                "skills": resume_data.get("skills", []),
+            })
+
+            # TODO (Sprint 3/4): use the saved resume with the Logic Manager for ranking
+            messages.success(request, "Resume received.")
+            return redirect("matcher:job_results")
     else:
         form = ResumeUploadForm()
 
