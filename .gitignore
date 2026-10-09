@@ -16,6 +16,7 @@ media/uploads/*
 
 # Saved resumes (real people's details - don't commit)
 data/resumes*.json
+data/job_matches*.json
 
 # OS / editor
 .DS_Store

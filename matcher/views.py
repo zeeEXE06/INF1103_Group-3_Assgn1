@@ -19,7 +19,7 @@ from django.utils import timezone
 
 from .dummy_data import sample_ranked_candidates, sample_ranked_jobs
 from .managers.ai_manager import ask_ai, parse_json_reply
-from .managers.data_manager import save_record
+from .managers.data_manager import load_records, save_record
 from .managers.io_manager import (
     JobFilterForm,
     JobPostingForm,
@@ -27,6 +27,7 @@ from .managers.io_manager import (
     validate_pdf_file,
 )
 from .managers.logic_manager import filter_jobs
+from .services.matching_service import match_jobs_to_resume
 
 logger = logging.getLogger(__name__)
 
@@ -201,7 +202,7 @@ def job_seeker_upload(request):
                 return render(request, "matcher/job_seeker.html", {"form": form})
 
             # DATA: saved resume record, e.g. {"id": "R001", "filename": ..., "skills": [...]}
-            save_record("resumes", {
+            resume = save_record("resumes", {
                 "filename": resume_file.name,
                 "uploaded_at": timezone.now().isoformat(timespec="seconds"),
                 "education": resume_data.get("education", []),
@@ -209,8 +210,25 @@ def job_seeker_upload(request):
                 "skills": resume_data.get("skills", []),
             })
 
-            # TODO (Sprint 3/4): use the saved resume with the Logic Manager for ranking
-            messages.success(request, "Resume received.")
+            # DATA: job titles suggested by the AI with Jobstreet search links,
+            # saved in data/job_matches.json
+            try:
+                job_match = match_jobs_to_resume(resume["id"])
+            except Exception:
+                # The resume is already saved, so still continue to the results page
+                logger.exception("Job search failed for resume %s", resume["id"])
+                messages.warning(
+                    request,
+                    "Resume received, but the job search failed. Please try again later.",
+                )
+                return redirect("matcher:job_results")
+
+            # Remember this visitor's match so the results page shows their jobs only
+            request.session["job_match_id"] = job_match["id"]
+            messages.success(
+                request,
+                f"Resume received. Found {len(job_match['jobs'])} matching job title(s) to search on Jobstreet.",
+            )
             return redirect("matcher:job_results")
     else:
         form = ResumeUploadForm()
@@ -218,8 +236,36 @@ def job_seeker_upload(request):
     return render(request, "matcher/job_seeker.html", {"form": form})
 
 
+def get_job_suggestions(request):
+    """Return the AI's suggested jobs for this visitor's last upload, best first.
+
+    Each job: {"rank", "title", "url", "industry", "matched_skills", "match_reason"}.
+    Empty if the visitor has not uploaded a resume (or the match was not found).
+    """
+    job_match_id = request.session.get("job_match_id")
+    if not job_match_id:
+        return []
+
+    for record in load_records("job_matches"):
+        if record.get("id") == job_match_id:
+            return [
+                {"rank": rank, **job}
+                for rank, job in enumerate(record.get("jobs", []), start=1)
+            ]
+    return []
+
+
 def job_results(request):
     """Job seeker results: jobs ranked against the resume, with filters."""
+    if is_live_mode():
+        # DATA: AI-suggested job titles with Jobstreet search links. The
+        # filters need location/hours data these don't have, so they're hidden.
+        return render(
+            request,
+            "matcher/job_results.html",
+            {"job_suggestions": get_job_suggestions(request), "total_job_count": 0},
+        )
+
     # DATA: all ranked jobs, before filtering
     all_jobs = get_ranked_jobs()
 
