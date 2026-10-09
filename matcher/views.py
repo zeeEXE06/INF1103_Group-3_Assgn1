@@ -129,15 +129,22 @@ def job_seeker_upload(request):
             """
             Analyze the uploaded resume.
 
-            Extract the candidate's education information.
+            Extract the candidate's education & experience information.
 
-            Look for information such as:
+            Look for educationinformation such as:
             - Degrees
             - Diplomas
             - Certificates
             - Fields of study
             - Schools or universities
             - Dates of study
+            
+            Look for experience information such as:
+            - Job titles
+            - Companies
+            - Dates of employment
+            
+            Look for skills also and fill them into JSON accordingly.
 
             Return ONLY valid JSON in this format:
 
@@ -151,12 +158,29 @@ def job_seeker_upload(request):
                         "end_date": ""
                     }
                 ]
+                "experience": [
+                    {
+                        "job_title": "",
+                        "company": "",
+                        "start_date": "",
+                        "end_date": ""
+                    }
+                ]
+                "skills": [
+                    {
+                        "skill": ""
+                    }
+                ]
             }
 
-            If no education information is found, return:
+            If none of the information is found, return:
+            the following json with empty arrays if applicable:
             {
-                "education": []
+                "education": [],
+                "experience": [],
+                "skills": []
             }
+            
 
             Do not invent information that is not present in the resume.
             """,
