@@ -81,7 +81,7 @@ pip install -r requirements.txt
 ```
 
 Re-run this after every `git pull` — teammates may have added packages
-(e.g. `openai` for the AI Manager). If the app fails with
+(e.g. `google-genai` for the AI Manager). If the app fails with
 `ModuleNotFoundError`, this is the fix.
 
 ### 5. Create your `.env` file
@@ -154,7 +154,10 @@ After changing `.env`, **restart `runserver`** for it to take effect.
 | `DATA_MODE` | `debug` | `debug` = sample data, `live` = real data ([details](#debug-vs-live-mode)) |
 | `MAX_UPLOAD_SIZE_MB` | `10` | Largest PDF users can upload |
 | `AI_MODE` | `mock` | `mock` = fake AI replies, `live` = real AI calls (Sprint 4) |
-| `AI_API_KEY` | *(empty)* | Your OpenRouter API key (`OPENROUTER_API_KEY` also works) |
+| `AI_API_KEY` | *(empty)* | Your free Gemini API key from [AI Studio](https://aistudio.google.com/apikey) (`GEMINI_API_KEY` also works) |
+| `AI_MODEL` | `gemini-3.8-flash` | Gemini model used by the AI Manager |
+| `AI_FALLBACK_MODELS` | `gemini-3.5-flash` | Backup models (comma-separated) tried if `AI_MODEL` is busy |
+| `MAX_JOBS` | `15` | Most Jobstreet jobs the AI job search returns per resume |
 | `DJANGO_DEBUG` | `True` | Shows detailed error pages — set `False` if deployed |
 | `DJANGO_SECRET_KEY` | placeholder | Must be a real random value if deployed |
 | `DJANGO_ALLOWED_HOSTS` | `127.0.0.1,localhost` | Web addresses allowed to serve the app |
