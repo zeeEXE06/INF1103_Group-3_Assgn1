@@ -25,6 +25,66 @@ from .managers.io_manager import (
 from .managers.logic_manager import filter_jobs
 
 
+# Prompt sent to the AI Manager with the job seeker's resume PDF
+RESUME_EXTRACTION_PROMPT = """
+Analyze the uploaded resume.
+
+Extract the candidate's education & experience information.
+
+Look for education information such as:
+- Degrees
+- Diplomas
+- Certificates
+- Fields of study
+- Schools or universities
+- Dates of study
+
+Look for experience information such as:
+- Job titles
+- Companies
+- Dates of employment
+
+Look for skills also and fill them into JSON accordingly.
+
+Return ONLY valid JSON in this format:
+
+{
+    "education": [
+        {
+            "qualification": "",
+            "institution": "",
+            "field_of_study": "",
+            "start_date": "",
+            "end_date": ""
+        }
+    ],
+    "experience": [
+        {
+            "job_title": "",
+            "company": "",
+            "start_date": "",
+            "end_date": ""
+        }
+    ],
+    "skills": [
+        {
+            "skill": ""
+        }
+    ]
+}
+
+If none of the information is found, return the following JSON with
+empty arrays if applicable:
+{
+    "education": [],
+    "experience": [],
+    "skills": []
+}
+
+Do not invent information that is not present in the resume.
+"""
+
+
 # ---------- Data mode (debug = fixed sample data, live = real data) ----------
 
 def is_live_mode():
@@ -116,8 +176,9 @@ def job_seeker_upload(request):
             # DATA: job seeker's resume PDF
             resume_file = form.cleaned_data["resume_file"]
 
-            # DATA: AI Manager's reply (mock reply unless AI_MODE=live)
-            ai_result = ask_ai("Read this resume and prepare to analyze it.", resume_file)
+            # DATA: AI Manager's reply as JSON text (mock reply unless AI_MODE=live)
+            ai_result = ask_ai(RESUME_EXTRACTION_PROMPT, resume_file)
+            print("AI RESULT:", ai_result)
 
             # TODO (Sprint 2): extract text from resume_file and save it
             # with the Data Manager
