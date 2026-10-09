@@ -72,6 +72,10 @@ DATABASES = {
     }
 }
 
+# Keep sessions in a signed cookie so no database tables (migrations) are needed.
+# The session only holds small values, e.g. which job match the visitor uploaded.
+SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
+
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "Asia/Singapore"
 USE_I18N = True
@@ -102,7 +106,15 @@ DATA_DIR = BASE_DIR / "data"
 MAX_UPLOAD_SIZE_MB = int(os.environ.get("MAX_UPLOAD_SIZE_MB", "10"))
 ALLOWED_UPLOAD_EXTENSIONS = [".pdf"]
 
+# Most Jobstreet jobs the AI job search returns for one resume
+MAX_JOBS = int(os.environ.get("MAX_JOBS", "15"))
+
 # AI Manager settings (Sprint 4)
 AI_MODE = os.environ.get("AI_MODE", "mock")  # "mock" or "live"
-# OpenRouter key. OPENROUTER_API_KEY is also accepted so older .env files still work.
-AI_API_KEY = os.environ.get("AI_API_KEY") or os.environ.get("OPENROUTER_API_KEY", "")
+# Free Gemini key from https://aistudio.google.com/apikey. GEMINI_API_KEY also works.
+AI_API_KEY = os.environ.get("AI_API_KEY") or os.environ.get("GEMINI_API_KEY", "")
+AI_MODEL = os.environ.get("AI_MODEL", "gemini-3.8-flash")
+# Models to try, in order, if AI_MODEL is overloaded (503) or rate limited (429)
+AI_FALLBACK_MODELS = [
+    m.strip() for m in os.environ.get("AI_FALLBACK_MODELS", "gemini-3.5-flash").split(",") if m.strip()
+]
