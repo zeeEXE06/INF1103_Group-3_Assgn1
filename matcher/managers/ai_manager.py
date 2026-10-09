@@ -45,6 +45,10 @@ MOCK_REPLY = json.dumps({
 MOCK_JOBS_REPLY = json.dumps({
     "jobs": [{
         "title": "Junior Python Developer",
+        "match_score": 82,
+        "location": "Central",
+        "work_arrangement": "Hybrid",
+        "working_hours": "Standard",
         "industry": "Technology / IT",
         "matched_skills": ["Python", "Django"],
         "match_reason": "Uses the candidate's Python and Django skills.",

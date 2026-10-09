@@ -14,6 +14,12 @@ from django.utils import timezone
 
 from ..managers.ai_manager import ask_ai_text, parse_json_reply
 from ..managers.data_manager import load_records, save_record
+from ..managers.io_manager import (
+    INDUSTRY_CHOICES,
+    LOCATION_CHOICES,
+    WORK_ARRANGEMENT_CHOICES,
+    WORKING_HOURS_CHOICES,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -28,10 +34,18 @@ Candidate resume (JSON):
 
 Rules:
 - Suggest at most {max_jobs} job titles, best match first.
+- match_score is a whole number from 0 to 100: how well the resume fits
+  the job title's usual requirements (skills, experience, education).
 - Use common job titles people actually search for on job sites,
   2-4 words each (e.g. "Junior Python Developer", "Data Analyst").
 - No company names, no locations, no duplicate titles.
 - matched_skills must only use skills from the resume.
+- For location, work_arrangement, working_hours and industry, give what is
+  most typical in Singapore for this job title. Use ONLY these values:
+  location: {locations}
+  work_arrangement: {work_arrangements}
+  working_hours: {working_hours}
+  industry: {industries}
 
 Return ONLY valid JSON in this format:
 
@@ -39,6 +53,10 @@ Return ONLY valid JSON in this format:
     "jobs": [
         {{
             "title": "",
+            "match_score": 0,
+            "location": "",
+            "work_arrangement": "",
+            "working_hours": "",
             "industry": "",
             "matched_skills": [""],
             "match_reason": ""
@@ -55,6 +73,24 @@ def jobstreet_search_url(title):
     """
     slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
     return f"{JOBSTREET_BASE_URL}/{slug}-jobs"
+
+
+def choice_values(choices):
+    """[("WFH", "Work From Home"), ...] -> ["WFH", ...] (skips the "" = all option)."""
+    return [value for value, _label in choices if value]
+
+
+def pick(value, choices):
+    """Keep the AI's value only if it is one of the filter options, else ""."""
+    return value if value in choice_values(choices) else ""
+
+
+def to_score(value):
+    """Turn the AI's match_score into a whole number from 0 to 100."""
+    try:
+        return max(0, min(100, round(float(value))))
+    except (TypeError, ValueError):
+        return 0
 
 
 def match_jobs_to_resume(resume_id=None):
@@ -81,6 +117,10 @@ def match_jobs_to_resume(resume_id=None):
             indent=2,
         ),
         max_jobs=max_jobs,
+        locations=", ".join(choice_values(LOCATION_CHOICES)),
+        work_arrangements=", ".join(choice_values(WORK_ARRANGEMENT_CHOICES)),
+        working_hours=", ".join(choice_values(WORKING_HOURS_CHOICES)),
+        industries=", ".join(choice_values(INDUSTRY_CHOICES)),
     )
 
     reply = parse_json_reply(ask_ai_text(prompt))
@@ -88,7 +128,7 @@ def match_jobs_to_resume(resume_id=None):
         raise ValueError("AI job title reply is not in the expected JSON format")
 
     # DATA: suggested job titles with a Jobstreet search link, no duplicates,
-    # capped at MAX_JOBS
+    # best match first, capped at MAX_JOBS
     jobs = []
     seen_urls = set()
     for job in reply["jobs"]:
@@ -102,11 +142,15 @@ def match_jobs_to_resume(resume_id=None):
         jobs.append({
             "title": title,
             "url": url,
-            "industry": job.get("industry", ""),
+            "match_score": to_score(job.get("match_score")),
+            "location": pick(job.get("location"), LOCATION_CHOICES),
+            "work_arrangement": pick(job.get("work_arrangement"), WORK_ARRANGEMENT_CHOICES),
+            "working_hours": pick(job.get("working_hours"), WORKING_HOURS_CHOICES),
+            "industry": pick(job.get("industry"), INDUSTRY_CHOICES),
             "matched_skills": job.get("matched_skills", []),
             "match_reason": job.get("match_reason", ""),
         })
-    jobs = jobs[:max_jobs]
+    jobs = sorted(jobs, key=lambda job: job["match_score"], reverse=True)[:max_jobs]
 
     return save_record("job_matches", {
         "resume_id": resume["id"],
