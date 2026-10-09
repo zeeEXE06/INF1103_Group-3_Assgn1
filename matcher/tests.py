@@ -6,6 +6,7 @@ TODO (Sprint 4): AI response checks (mock mode + missing key tests below)
 """
 
 import io
+import json
 import tempfile
 from pathlib import Path
 
@@ -149,7 +150,7 @@ class JobSeekerWorkflowTests(TempDataDirMixin, TestCase):
         self.assertContains(response, "#1")
 
 
-class DataModeTests(TestCase):
+class DataModeTests(TempDataDirMixin, TestCase):
     @override_settings(DATA_MODE="debug")
     def test_debug_mode_shows_sample_data(self):
         response = self.client.get(reverse("matcher:employer_results"))
@@ -208,11 +209,52 @@ class AIManagerTests(TestCase):
         reply = parse_json_reply(ask_ai("test prompt", make_pdf_file()))
         self.assertEqual(set(reply), {"education", "experience", "skills"})
 
+    @override_settings(AI_MODE="live", AI_API_KEY="test", AI_MODEL="main", AI_FALLBACK_MODELS=["backup"])
+    def test_busy_model_falls_back_to_next_model(self):
+        from unittest.mock import MagicMock, patch
+
+        from google.genai import errors
+
+        from .managers.ai_manager import generate
+
+        busy = errors.ServerError(503, {"error": {"code": 503, "message": "high demand"}})
+        client = MagicMock()
+        client.models.generate_content.side_effect = [busy, MagicMock(text="ok")]
+
+        with patch("matcher.managers.ai_manager.get_client", return_value=client):
+            with self.assertLogs("matcher.managers.ai_manager", level="WARNING"):
+                self.assertEqual(generate("hi", None), "ok")
+        models = [c.kwargs["model"] for c in client.models.generate_content.call_args_list]
+        self.assertEqual(models, ["main", "backup"])
+
+    @override_settings(AI_MODE="live", AI_API_KEY="test", AI_MODEL="main", AI_FALLBACK_MODELS=["backup"])
+    def test_bad_key_error_does_not_fall_back(self):
+        from unittest.mock import MagicMock, patch
+
+        from google.genai import errors
+
+        from .managers.ai_manager import generate
+
+        client = MagicMock()
+        client.models.generate_content.side_effect = errors.ClientError(
+            400, {"error": {"code": 400, "message": "API key not valid"}}
+        )
+        with patch("matcher.managers.ai_manager.get_client", return_value=client):
+            with self.assertRaises(errors.ClientError):
+                generate("hi", None)
+        self.assertEqual(client.models.generate_content.call_count, 1)
+
     def test_parse_json_reply_strips_code_fences(self):
         from .managers.ai_manager import parse_json_reply
 
         reply = '```json\n{"skills": [{"skill": "SQL"}]}\n```'
         self.assertEqual(parse_json_reply(reply), {"skills": [{"skill": "SQL"}]})
+
+    def test_parse_json_reply_ignores_text_around_json(self):
+        from .managers.ai_manager import parse_json_reply
+
+        reply = 'Here are the jobs I found:\n{"jobs": []}\nGood luck!'
+        self.assertEqual(parse_json_reply(reply), {"jobs": []})
 
     def test_parse_json_reply_rejects_non_json(self):
         from .managers.ai_manager import parse_json_reply
@@ -252,3 +294,86 @@ class DataManagerTests(TempDataDirMixin, TestCase):
         save_record("resumes", {"filename": "a.pdf"})
         self.assertEqual(len(load_records("resumes")), 1)
         self.assertEqual((self.data_dir / "resumes.broken.json").read_text(), "{not json")
+
+
+@override_settings(AI_MODE="mock", MAX_JOBS=2)
+class JobSearchTests(TempDataDirMixin, TestCase):
+    def save_resume(self):
+        from .managers.data_manager import save_record
+
+        return save_record("resumes", {"filename": "r.pdf", "skills": [{"skill": "Python"}]})
+
+    def test_saves_jobs_for_resume(self):
+        from .managers.data_manager import load_records
+        from .services.matching_service import match_jobs_to_resume
+
+        resume = self.save_resume()
+        record = match_jobs_to_resume()
+        self.assertEqual(record["resume_id"], resume["id"])
+        self.assertEqual(len(record["jobs"]), 1)
+        self.assertEqual(load_records("job_matches"), [record])
+
+    def test_builds_jobstreet_links_skips_duplicates_and_caps_at_max_jobs(self):
+        from unittest.mock import patch
+
+        from .services.matching_service import match_jobs_to_resume
+
+        self.save_resume()
+        reply = json.dumps({"jobs": [
+            {"title": "Junior Python Developer"},
+            {"title": "junior python developer"},
+            {"title": ""},
+            {"title": "C++ / Embedded Engineer"},
+            {"title": "Data Analyst"},
+        ]})
+        with patch("matcher.services.matching_service.ask_ai_text", return_value=reply):
+            record = match_jobs_to_resume()
+        self.assertEqual([job["url"] for job in record["jobs"]], [
+            "https://sg.jobstreet.com/junior-python-developer-jobs",
+            "https://sg.jobstreet.com/c-embedded-engineer-jobs",
+        ])
+
+    def test_no_saved_resume_raises(self):
+        from .services.matching_service import match_jobs_to_resume
+
+        with self.assertRaises(ValueError):
+            match_jobs_to_resume()
+
+    def test_failed_job_search_still_saves_resume(self):
+        from unittest.mock import patch
+
+        from .managers.data_manager import load_records
+
+        with patch("matcher.views.match_jobs_to_resume", side_effect=RuntimeError("boom")):
+            with self.assertLogs("matcher.views", level="ERROR"):
+                response = self.client.post(
+                    reverse("matcher:job_seeker_upload"),
+                    {"resume_file": make_pdf_file("resume.pdf")},
+                    follow=True,
+                )
+        self.assertContains(response, "the job search failed")
+        self.assertEqual(len(load_records("resumes")), 1)
+
+
+@override_settings(AI_MODE="mock", DATA_MODE="live")
+class JobSuggestionResultsTests(TempDataDirMixin, TestCase):
+    def upload_resume(self):
+        return self.client.post(
+            reverse("matcher:job_seeker_upload"),
+            {"resume_file": make_pdf_file("resume.pdf")},
+            follow=True,
+        )
+
+    def test_results_show_suggested_jobs_with_jobstreet_links(self):
+        response = self.upload_resume()
+        self.assertContains(response, "Junior Python Developer")
+        self.assertContains(response, 'href="https://sg.jobstreet.com/junior-python-developer-jobs"')
+        self.assertContains(response, "View jobs on Jobstreet")
+        self.assertNotContains(response, "Apply filters")
+
+    def test_other_visitors_do_not_see_your_jobs(self):
+        self.upload_resume()
+        self.client.cookies.clear()
+        response = self.client.get(reverse("matcher:job_results"))
+        self.assertNotContains(response, "Junior Python Developer")
+        self.assertContains(response, "No matches yet")
