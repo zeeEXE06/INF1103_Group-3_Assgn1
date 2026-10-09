@@ -26,7 +26,7 @@ from .managers.io_manager import (
     ResumeUploadForm,
     validate_pdf_file,
 )
-from .managers.logic_manager import filter_jobs
+from .managers.logic_manager import filter_jobs, rank_jobs
 from .services.matching_service import match_jobs_to_resume
 
 logger = logging.getLogger(__name__)
@@ -237,9 +237,11 @@ def job_seeker_upload(request):
 
 
 def get_job_suggestions(request):
-    """Return the AI's suggested jobs for this visitor's last upload, best first.
+    """Return the saved AI job suggestions for this visitor's last upload, best first.
 
-    Each job: {"rank", "title", "url", "industry", "matched_skills", "match_reason"}.
+    Reads data/job_matches.json via the Data Manager - no AI call. Each job is a
+    dict with rank, title, url, match_score, location, work_arrangement,
+    working_hours, industry, matched_skills and match_reason.
     Empty if the visitor has not uploaded a resume (or the match was not found).
     """
     job_match_id = request.session.get("job_match_id")
@@ -248,26 +250,19 @@ def get_job_suggestions(request):
 
     for record in load_records("job_matches"):
         if record.get("id") == job_match_id:
-            return [
-                {"rank": rank, **job}
-                for rank, job in enumerate(record.get("jobs", []), start=1)
-            ]
+            return rank_jobs(record.get("jobs", []))
     return []
 
 
 def job_results(request):
     """Job seeker results: jobs ranked against the resume, with filters."""
+    # DATA: all ranked jobs, before filtering. Live mode = the AI's suggested
+    # job titles saved in job_matches.json; debug mode = sample jobs.
+    # Filtering only reads saved data, so changing filters never calls the AI.
     if is_live_mode():
-        # DATA: AI-suggested job titles with Jobstreet search links. The
-        # filters need location/hours data these don't have, so they're hidden.
-        return render(
-            request,
-            "matcher/job_results.html",
-            {"job_suggestions": get_job_suggestions(request), "total_job_count": 0},
-        )
-
-    # DATA: all ranked jobs, before filtering
-    all_jobs = get_ranked_jobs()
+        all_jobs = get_job_suggestions(request)
+    else:
+        all_jobs = get_ranked_jobs()
 
     # Filters come from the URL, e.g. ?locations=North&industry=Technology+%2F+IT
     filter_form = JobFilterForm(request.GET)
@@ -292,5 +287,6 @@ def job_results(request):
             "total_job_count": len(all_jobs),
             "filter_form": filter_form,
             "filters_applied": bool(request.GET),
+            "show_jobstreet_links": is_live_mode(),
         },
     )

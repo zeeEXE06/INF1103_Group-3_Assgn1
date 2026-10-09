@@ -298,6 +298,22 @@ class DataManagerTests(TempDataDirMixin, TestCase):
 
 @override_settings(AI_MODE="mock", MAX_JOBS=2)
 class JobSearchTests(TempDataDirMixin, TestCase):
+    def test_sorts_by_score_and_cleans_ai_values(self):
+        from unittest.mock import patch
+
+        from .services.matching_service import match_jobs_to_resume
+
+        self.save_resume()
+        reply = json.dumps({"jobs": [
+            {"title": "Low", "match_score": "40", "location": "Mars", "work_arrangement": "WFH"},
+            {"title": "High", "match_score": 150, "industry": "Technology / IT"},
+        ]})
+        with patch("matcher.services.matching_service.ask_ai_text", return_value=reply):
+            record = match_jobs_to_resume()
+        high, low = record["jobs"]
+        self.assertEqual((high["title"], high["match_score"]), ("High", 100))
+        self.assertEqual((low["match_score"], low["location"], low["work_arrangement"]), (40, "", "WFH"))
+
     def save_resume(self):
         from .managers.data_manager import save_record
 
@@ -369,7 +385,30 @@ class JobSuggestionResultsTests(TempDataDirMixin, TestCase):
         self.assertContains(response, "Junior Python Developer")
         self.assertContains(response, 'href="https://sg.jobstreet.com/junior-python-developer-jobs"')
         self.assertContains(response, "View jobs on Jobstreet")
-        self.assertNotContains(response, "Apply filters")
+        self.assertContains(response, "82%")
+        self.assertContains(response, "Apply filters")
+
+    def test_filters_apply_to_suggested_jobs(self):
+        self.upload_resume()
+        url = reverse("matcher:job_results")
+
+        response = self.client.get(url, {"work_arrangement": ["Hybrid"], "locations": ["Central"]})
+        self.assertContains(response, "Junior Python Developer")
+
+        response = self.client.get(url, {"locations": ["North"]})
+        self.assertNotContains(response, "Junior Python Developer")
+        self.assertContains(response, "No jobs match these filters")
+
+    def test_changing_filters_does_not_call_the_ai(self):
+        from unittest.mock import patch
+
+        self.upload_resume()
+        with patch("matcher.services.matching_service.ask_ai_text") as ai_text, \
+                patch("matcher.views.ask_ai") as ai_pdf:
+            self.client.get(reverse("matcher:job_results"), {"locations": ["Central"]})
+            self.client.get(reverse("matcher:job_results"), {"industry": "Technology / IT"})
+        ai_text.assert_not_called()
+        ai_pdf.assert_not_called()
 
     def test_other_visitors_do_not_see_your_jobs(self):
         self.upload_resume()
@@ -377,3 +416,25 @@ class JobSuggestionResultsTests(TempDataDirMixin, TestCase):
         response = self.client.get(reverse("matcher:job_results"))
         self.assertNotContains(response, "Junior Python Developer")
         self.assertContains(response, "No matches yet")
+
+
+class LogicManagerTests(TestCase):
+    def test_rank_jobs_sorts_by_score_and_fills_missing_fields(self):
+        from .managers.logic_manager import rank_jobs
+
+        ranked = rank_jobs([{"title": "B", "match_score": 50}, {"title": "A", "match_score": 90}])
+        self.assertEqual([(j["rank"], j["title"]) for j in ranked], [(1, "A"), (2, "B")])
+        self.assertEqual(ranked[0]["location"], "")
+
+    def test_filter_jobs_works_on_saved_job_dicts(self):
+        from .managers.logic_manager import filter_jobs
+
+        jobs = [
+            {"title": "A", "location": "West", "work_arrangement": "On-site",
+             "working_hours": "Standard", "industry": "Manufacturing"},
+            {"title": "B", "location": "Central", "work_arrangement": "Hybrid",
+             "working_hours": "Standard", "industry": "Technology / IT"},
+        ]
+        self.assertEqual([j["title"] for j in filter_jobs(jobs, [], ["West"], [], "")], ["A"])
+        self.assertEqual([j["title"] for j in filter_jobs(jobs, ["Hybrid"], [], ["Standard"], "Technology / IT")], ["B"])
+        self.assertEqual(len(filter_jobs(jobs, [], [], [], "")), 2)
