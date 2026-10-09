@@ -9,13 +9,17 @@ Sprint 3: score and rank results with the Logic Manager.
 Sprint 4: analyse resumes and jobs with the AI Manager.
 """
 
+import logging
+
 from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.shortcuts import redirect, render
+from django.utils import timezone
 
 from .dummy_data import sample_ranked_candidates, sample_ranked_jobs
-from .managers.ai_manager import ask_ai
+from .managers.ai_manager import ask_ai, parse_json_reply
+from .managers.data_manager import save_record
 from .managers.io_manager import (
     JobFilterForm,
     JobPostingForm,
@@ -23,6 +27,8 @@ from .managers.io_manager import (
     validate_pdf_file,
 )
 from .managers.logic_manager import filter_jobs
+
+logger = logging.getLogger(__name__)
 
 
 # Prompt sent to the AI Manager with the job seeker's resume PDF
@@ -177,12 +183,33 @@ def job_seeker_upload(request):
             resume_file = form.cleaned_data["resume_file"]
 
             # DATA: AI Manager's reply as JSON text (mock reply unless AI_MODE=live)
-            ai_result = ask_ai(RESUME_EXTRACTION_PROMPT, resume_file)
-            print("AI RESULT:", ai_result)
+            try:
+                ai_result = ask_ai(RESUME_EXTRACTION_PROMPT, resume_file)
+            except Exception:
+                # Bad/missing API key, network down, rate limit, etc.
+                logger.exception("AI call failed for %s", resume_file.name)
+                messages.error(
+                    request,
+                    "The AI service is unavailable right now. Please try again later.",
+                )
+                return render(request, "matcher/job_seeker.html", {"form": form})
 
-            # TODO (Sprint 2): extract text from resume_file and save it
-            # with the Data Manager
-            # TODO (Sprint 3/4): use ai_result with the Logic Manager for ranking
+            # DATA: education/experience/skills parsed from the reply (None if broken)
+            resume_data = parse_json_reply(ai_result)
+            if resume_data is None:
+                messages.error(request, "Could not read the resume. Please try again.")
+                return render(request, "matcher/job_seeker.html", {"form": form})
+
+            # DATA: saved resume record, e.g. {"id": "R001", "filename": ..., "skills": [...]}
+            save_record("resumes", {
+                "filename": resume_file.name,
+                "uploaded_at": timezone.now().isoformat(timespec="seconds"),
+                "education": resume_data.get("education", []),
+                "experience": resume_data.get("experience", []),
+                "skills": resume_data.get("skills", []),
+            })
+
+            # TODO (Sprint 3/4): use the saved resume with the Logic Manager for ranking
             messages.success(request, "Resume received.")
             return redirect("matcher:job_results")
     else:

@@ -14,6 +14,7 @@ No scoring or business logic here - that goes in logic_manager.py.
 """
 
 import base64
+import json
 import logging
 
 from django.conf import settings
@@ -21,6 +22,24 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
+# DATA: fixed mock reply, shaped like a real resume extraction
+MOCK_REPLY = json.dumps({
+    "education": [{
+        "qualification": "B.Sc.",
+        "institution": "Sample University",
+        "field_of_study": "Computer Science",
+        "start_date": "2020",
+        "end_date": "2024",
+    }],
+    "experience": [{
+        "job_title": "Software Developer Intern",
+        "company": "Sample Company",
+        "start_date": "2023",
+        "end_date": "2023",
+    }],
+    "skills": [{"skill": "Python"}, {"skill": "Django"}],
+})
 
 
 def get_client():
@@ -42,10 +61,9 @@ def ask_ai(prompt, uploaded_file):
     )
 
     if settings.AI_MODE != "live":
-        # DATA: fixed mock reply
-        return "PDF received"
+        return MOCK_REPLY
 
-    # TODO (Sprint 4): validate the JSON reply and retry if it is broken.
+    # TODO (Sprint 4): retry if the JSON reply is broken.
     pdf_bytes = uploaded_file.read()
     pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
 
@@ -69,3 +87,24 @@ def ask_ai(prompt, uploaded_file):
         ],
     )
     return response.choices[0].message.content
+
+
+def parse_json_reply(reply):
+    """Turn the AI's text reply into a dict. Returns None if it is not valid JSON."""
+    text = (reply or "").strip()
+
+    # Models often wrap JSON in ```json ... ``` - strip the fences
+    if text.startswith("```"):
+        text = text.split("\n", 1)[-1]
+        text = text.rsplit("```", 1)[0]
+
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        logger.warning("AI reply is not valid JSON: %.200s", reply)
+        return None
+
+    if not isinstance(data, dict):
+        logger.warning("AI reply is JSON but not an object: %.200s", reply)
+        return None
+    return data
