@@ -3,7 +3,7 @@ Sprint 1 tests: pages load and upload checks work.
 
 TODO (Sprint 2): save/load, missing and broken file tests
 TODO (Sprint 3): scoring, "Strong Match" rule and ranking tests
-TODO (Sprint 4): AI response checks and mocked AI call tests
+TODO (Sprint 4): AI response checks (mock mode + missing key tests below)
 """
 
 import io
@@ -139,3 +139,18 @@ class JobFilterTests(TestCase):
     def test_bad_filter_value_shows_all_jobs(self):
         response = self.get_results({"locations": ["Mars"]})
         self.assertContains(response, "Showing 3 of 3 jobs")
+
+
+class AIManagerTests(TestCase):
+    @override_settings(AI_MODE="mock")
+    def test_mock_mode_returns_reply_without_api_key(self):
+        from .managers.ai_manager import ask_ai
+
+        self.assertEqual(ask_ai("test prompt", make_pdf_file()), "PDF received")
+
+    @override_settings(AI_MODE="live", AI_API_KEY="")
+    def test_live_mode_without_key_gives_clear_error(self):
+        from .managers.ai_manager import get_client
+
+        with self.assertRaisesMessage(RuntimeError, "AI_API_KEY is not set"):
+            get_client()

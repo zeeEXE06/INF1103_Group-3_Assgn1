@@ -26,9 +26,9 @@ What's real in this sprint:
   working hours / industry
 - Both results pages: ranked cards with match score, matched/missing
   skills, compatibility checks, empty states
-- 17 automated tests covering page loads, upload validation,
+- 19 automated tests covering page loads, upload validation,
   successful-submission redirects, the debug/live data mode toggle,
-  and the job filters
+  the job filters, and the AI Manager's mock mode
 
 What's **not** real yet (by design — later sprints):
 
@@ -80,6 +80,10 @@ Interpreter** from the Command Palette (`Ctrl+Shift+P`) and pick the
 pip install -r requirements.txt
 ```
 
+Re-run this after every `git pull` — teammates may have added packages
+(e.g. `openai` for the AI Manager). If the app fails with
+`ModuleNotFoundError`, this is the fix.
+
 ### 5. Create your `.env` file
 
 Make your own copy of the settings template:
@@ -114,7 +118,7 @@ Open **http://127.0.0.1:8000/** in your browser.
 python manage.py test matcher
 ```
 
-You should see `Ran 17 tests ... OK`.
+You should see `Ran 19 tests ... OK`.
 
 ---
 
@@ -150,7 +154,7 @@ After changing `.env`, **restart `runserver`** for it to take effect.
 | `DATA_MODE` | `debug` | `debug` = sample data, `live` = real data ([details](#debug-vs-live-mode)) |
 | `MAX_UPLOAD_SIZE_MB` | `10` | Largest PDF users can upload |
 | `AI_MODE` | `mock` | `mock` = fake AI replies, `live` = real AI calls (Sprint 4) |
-| `AI_API_KEY` | *(empty)* | Your AI API key (Sprint 4) |
+| `AI_API_KEY` | *(empty)* | Your OpenRouter API key (`OPENROUTER_API_KEY` also works) |
 | `DJANGO_DEBUG` | `True` | Shows detailed error pages — set `False` if deployed |
 | `DJANGO_SECRET_KEY` | placeholder | Must be a real random value if deployed |
 | `DJANGO_ALLOWED_HOSTS` | `127.0.0.1,localhost` | Web addresses allowed to serve the app |
