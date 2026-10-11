@@ -165,6 +165,78 @@ def ask_ai_text(prompt):
     )
 
 
+def mock_comparison_reply(resume_count):
+    """DATA: fixed mock reply for the employer comparison, one candidate per resume."""
+    return json.dumps({
+        "job": {
+            "title": "Junior Python Developer",
+            "company": "Sample Tech Pte Ltd",
+            "required_skills": ["Python", "Django", "SQL"],
+            "location": "Central",
+            "work_arrangement": "Hybrid",
+            "working_hours": "Standard",
+            "industry": "Technology / IT",
+        },
+        "candidates": [
+            mock_candidate(number) for number in range(1, resume_count + 1)
+        ],
+    })
+
+
+def mock_candidate(number):
+    """DATA: mock candidate - #1 is a strong match, #2 a partial match, the rest weak."""
+    strong, partial = number == 1, number == 2
+    if strong:
+        matched, missing = ["Python", "Django", "SQL"], []
+    elif partial:
+        matched, missing = ["Python", "Django"], ["SQL"]
+    else:
+        matched, missing = ["Python"], ["Django", "SQL"]
+    return {
+        "resume_number": number,
+        "name": f"Sample Candidate {number}",
+        "matched_skills": matched,
+        "missing_skills": missing,
+        "experience": ["Software Developer, 3 years" if strong else "Intern, 6 months"],
+        "education": ["B.Sc. Computer Science"],
+        "location": "Central" if strong or partial else "West",
+        "work_arrangement": "Hybrid",
+        "working_hours": "Standard",
+        "experience_match": strong,
+        "education_match": True,
+        "location_match": strong or partial,
+        "work_arrangement_match": True,
+        "working_hours_match": strong,
+        "summary": f"Sample summary for candidate {number}.",
+    }
+
+
+def ask_ai_with_pdfs(prompt, labelled_files):
+    """Send a prompt with several PDFs in ONE request and return the JSON reply.
+
+    labelled_files: [(label, uploaded_file), ...], e.g.
+    [("JOB POSTING", job_file), ("RESUME 1", resume_file), ...]. Each label is
+    sent just before its PDF so the AI knows which file is which.
+    """
+    logger.info("AI Manager received %s PDFs", len(labelled_files))
+
+    if settings.AI_MODE != "live":
+        # First file is the job posting, the rest are resumes
+        return mock_comparison_reply(len(labelled_files) - 1)
+
+    from google.genai import types
+
+    contents = [prompt]
+    for label, uploaded_file in labelled_files:
+        contents.append(f"{label} ({uploaded_file.name}):")
+        contents.append(types.Part.from_bytes(data=uploaded_file.read(), mime_type="application/pdf"))
+
+    return generate_json(
+        contents=contents,
+        config=types.GenerateContentConfig(response_mime_type="application/json"),
+    )
+
+
 def parse_json_reply(reply):
     """Turn the AI's text reply into a dict. Returns None if it is not valid JSON."""
     text = (reply or "").strip()
