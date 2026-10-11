@@ -438,3 +438,47 @@ class LogicManagerTests(TestCase):
         self.assertEqual([j["title"] for j in filter_jobs(jobs, [], ["West"], [], "")], ["A"])
         self.assertEqual([j["title"] for j in filter_jobs(jobs, ["Hybrid"], [], ["Standard"], "Technology / IT")], ["B"])
         self.assertEqual(len(filter_jobs(jobs, [], [], [], "")), 2)
+
+
+class CandidateScoringTests(TestCase):
+    def candidate(self, matched=3, missing=0, **matches):
+        return {
+            "matched_skills": ["s"] * matched,
+            "missing_skills": ["m"] * missing,
+            **matches,
+        }
+
+    def test_full_match_scores_100(self):
+        from .managers.logic_manager import calculate_score
+
+        candidate = self.candidate(
+            experience_match=True, education_match=True, location_match=True,
+            work_arrangement_match=True, working_hours_match=True,
+        )
+        self.assertEqual(calculate_score(candidate), 100)
+
+    def test_weights(self):
+        from .managers.logic_manager import calculate_score
+
+        # Half the skills (20) + experience (25) + location (10)
+        candidate = self.candidate(matched=1, missing=1, experience_match=True, location_match=True)
+        self.assertEqual(calculate_score(candidate), 55)
+        self.assertEqual(calculate_score(self.candidate(matched=0, missing=0)), 0)
+
+    def test_strong_match_needs_skills_experience_and_location(self):
+        from .managers.logic_manager import is_strong_match
+
+        self.assertTrue(is_strong_match(self.candidate(7, 3, experience_match=True, location_match=True)))
+        self.assertFalse(is_strong_match(self.candidate(6, 4, experience_match=True, location_match=True)))
+        self.assertFalse(is_strong_match(self.candidate(3, 0, experience_match=False, location_match=True)))
+        self.assertFalse(is_strong_match(self.candidate(3, 0, experience_match=True, location_match=False)))
+
+    def test_rank_candidates_puts_unreadable_last(self):
+        from .managers.logic_manager import rank_candidates
+
+        ranked = rank_candidates([
+            {"name": "Unreadable", "match_score": 0, "unreadable": True},
+            {"name": "Low", "match_score": 10},
+            {"name": "High", "match_score": 80},
+        ])
+        self.assertEqual([(c["rank"], c["name"]) for c in ranked], [(1, "High"), (2, "Low"), (3, "Unreadable")])
