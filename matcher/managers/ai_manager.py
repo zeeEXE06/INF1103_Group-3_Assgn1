@@ -108,6 +108,25 @@ def generate(contents, config):
             logger.warning("%s unavailable (%s), trying %s", model, exc.code, models[i + 1])
 
 
+# How many times to ask before giving up on a broken (non-JSON) reply
+JSON_ATTEMPTS = 2
+
+
+def generate_json(contents, config):
+    """Like generate(), but asks again if the reply is not valid JSON.
+
+    Models sometimes return cut-off or broken JSON; a second try usually works.
+    Returns the last reply either way - the caller's parse_json_reply() decides.
+    """
+    for attempt in range(1, JSON_ATTEMPTS + 1):
+        reply = generate(contents, config)
+        if parse_json_reply(reply) is not None:
+            return reply
+        if attempt < JSON_ATTEMPTS:
+            logger.warning("AI reply was not valid JSON, asking again (attempt %s)", attempt + 1)
+    return reply
+
+
 def ask_ai(prompt, uploaded_file):
     """Send a prompt and the uploaded PDF to the AI and return its reply."""
     logger.info(
@@ -122,10 +141,9 @@ def ask_ai(prompt, uploaded_file):
 
     from google.genai import types
 
-    # TODO (Sprint 4): retry if the JSON reply is broken.
     pdf_bytes = uploaded_file.read()
 
-    return generate(
+    return generate_json(
         contents=[
             types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
             prompt,
@@ -141,7 +159,7 @@ def ask_ai_text(prompt):
 
     from google.genai import types
 
-    return generate(
+    return generate_json(
         contents=prompt,
         config=types.GenerateContentConfig(response_mime_type="application/json"),
     )

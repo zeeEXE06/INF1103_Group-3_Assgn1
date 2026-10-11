@@ -244,6 +244,17 @@ class AIManagerTests(TestCase):
                 generate("hi", None)
         self.assertEqual(client.models.generate_content.call_count, 1)
 
+    @override_settings(AI_MODE="live", AI_API_KEY="test")
+    def test_broken_json_reply_is_asked_again(self):
+        from unittest.mock import patch
+
+        from .managers.ai_manager import generate_json
+
+        with patch("matcher.managers.ai_manager.generate", side_effect=['{"broken', '{"ok": true}']) as gen:
+            with self.assertLogs("matcher.managers.ai_manager", level="WARNING"):
+                self.assertEqual(generate_json("hi", None), '{"ok": true}')
+        self.assertEqual(gen.call_count, 2)
+
     def test_parse_json_reply_strips_code_fences(self):
         from .managers.ai_manager import parse_json_reply
 
