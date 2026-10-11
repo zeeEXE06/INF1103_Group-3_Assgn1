@@ -32,6 +32,23 @@ def validate_pdf_file(uploaded_file):
 
 # ---------- Employer input ----------
 
+def validate_candidate_files(candidate_files):
+    """Check the employer's resume uploads. Returns a list of error messages."""
+    if not candidate_files:
+        return ["Upload at least one candidate resume (PDF)."]
+
+    errors = []
+    if len(candidate_files) > settings.MAX_CANDIDATES:
+        # All resumes go to the AI in one request, so keep the batch small
+        errors.append(f"Upload at most {settings.MAX_CANDIDATES} resumes at a time.")
+    for uploaded_file in candidate_files:
+        try:
+            validate_pdf_file(uploaded_file)
+        except ValidationError as exc:
+            errors.append(exc.message)
+    return errors
+
+
 class JobPostingForm(forms.Form):
     """Employer uploads the job description PDF."""
 

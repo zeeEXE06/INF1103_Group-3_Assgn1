@@ -157,6 +157,7 @@ After changing `.env`, **restart `runserver`** for it to take effect.
 | `AI_API_KEY` | *(empty)* | Your free Gemini API key from [AI Studio](https://aistudio.google.com/apikey) (`GEMINI_API_KEY` also works) |
 | `AI_MODEL` | `gemini-3.8-flash` | Gemini model used by the AI Manager |
 | `AI_FALLBACK_MODELS` | `gemini-3.5-flash` | Backup models (comma-separated) tried if `AI_MODEL` is busy |
+| `MAX_CANDIDATES` | `10` | Most resumes an employer can compare per upload |
 | `MAX_JOBS` | `15` | Most Jobstreet jobs the AI job search returns per resume |
 | `DJANGO_DEBUG` | `True` | Shows detailed error pages — set `False` if deployed |
 | `DJANGO_SECRET_KEY` | placeholder | Must be a real random value if deployed |
