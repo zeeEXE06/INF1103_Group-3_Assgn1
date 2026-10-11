@@ -41,7 +41,8 @@ class LandingPageTests(TestCase):
         self.assertContains(response, "Employer")
 
 
-class EmployerWorkflowTests(TestCase):
+@override_settings(AI_MODE="mock")
+class EmployerWorkflowTests(TempDataDirMixin, TestCase):
     def test_upload_page_loads(self):
         response = self.client.get(reverse("matcher:employer_upload"))
         self.assertEqual(response.status_code, 200)
@@ -75,6 +76,49 @@ class EmployerWorkflowTests(TestCase):
             },
         )
         self.assertRedirects(response, reverse("matcher:employer_results"))
+
+    @override_settings(MAX_CANDIDATES=2)
+    def test_rejects_too_many_resumes(self):
+        response = self.client.post(
+            reverse("matcher:employer_upload"),
+            {
+                "job_file": make_pdf_file("job.pdf"),
+                "candidate_files": [make_pdf_file(f"c{i}.pdf") for i in range(3)],
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "at most 2 resumes")
+
+    @override_settings(DATA_MODE="live")
+    def test_live_results_show_ranked_candidates_with_strong_match(self):
+        response = self.client.post(
+            reverse("matcher:employer_upload"),
+            {
+                "job_file": make_pdf_file("job.pdf"),
+                # Uploaded weakest first - the page must still rank #1 first
+                "candidate_files": [make_pdf_file("c3.pdf"), make_pdf_file("c2.pdf"), make_pdf_file("c1.pdf")],
+            },
+            follow=True,
+        )
+        content = response.content.decode()
+        self.assertContains(response, "Junior Python Developer")  # job posting summary
+        self.assertContains(response, "Strong Match", count=1)
+        # Mock: resume 1 (c3.pdf) is the strong match, so it is ranked first
+        self.assertLess(content.index("c3.pdf"), content.index("c2.pdf"))
+        self.assertLess(content.index("c2.pdf"), content.index("c1.pdf"))
+
+    @override_settings(DATA_MODE="live")
+    def test_failed_ai_call_shows_error_and_stays_on_page(self):
+        from unittest.mock import patch
+
+        with patch("matcher.views.match_candidates_to_job", side_effect=RuntimeError("503")):
+            with self.assertLogs("matcher.views", level="ERROR"):
+                response = self.client.post(
+                    reverse("matcher:employer_upload"),
+                    {"job_file": make_pdf_file("job.pdf"), "candidate_files": [make_pdf_file("c1.pdf")]},
+                )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "The AI service is unavailable")
 
     @override_settings(DATA_MODE="debug")
     def test_results_page_shows_ranked_candidates(self):

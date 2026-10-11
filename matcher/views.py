@@ -13,7 +13,6 @@ import logging
 
 from django.conf import settings
 from django.contrib import messages
-from django.core.exceptions import ValidationError
 from django.shortcuts import redirect, render
 from django.utils import timezone
 
@@ -24,10 +23,10 @@ from .managers.io_manager import (
     JobFilterForm,
     JobPostingForm,
     ResumeUploadForm,
-    validate_pdf_file,
+    validate_candidate_files,
 )
-from .managers.logic_manager import filter_jobs, rank_jobs
-from .services.matching_service import match_jobs_to_resume
+from .managers.logic_manager import filter_jobs, rank_candidates, rank_jobs
+from .services.matching_service import match_candidates_to_job, match_jobs_to_resume
 
 logger = logging.getLogger(__name__)
 
@@ -99,11 +98,7 @@ def is_live_mode():
 
 
 def get_ranked_candidates():
-    """Return the ranked candidates for the employer results page."""
-    if is_live_mode():
-        # TODO (Sprint 2/3): load candidates with the Data Manager and rank
-        # them with the Logic Manager. Empty until then.
-        return []
+    """Return the sample ranked candidates (debug mode)."""
     return sample_ranked_candidates()
 
 
@@ -132,27 +127,34 @@ def employer_upload(request):
         # DATA: list of candidate resume PDFs uploaded by the employer
         candidate_files = request.FILES.getlist("candidate_files")
 
-        if not candidate_files:
-            candidate_errors.append("Upload at least one candidate resume (PDF).")
-        else:
-            for uploaded_file in candidate_files:
-                try:
-                    validate_pdf_file(uploaded_file)
-                except ValidationError as exc:
-                    candidate_errors.append(exc.message)
+        candidate_errors = validate_candidate_files(candidate_files)
 
         if job_form.is_valid() and not candidate_errors:
             # DATA: job description PDF uploaded by the employer
             job_file = job_form.cleaned_data["job_file"]
 
-            # TODO (Sprint 2): extract text from job_file and candidate_files,
-            # then save them with the Data Manager
-            # TODO (Sprint 3/4): send them to the AI + Logic Managers for ranking
-            messages.success(
-                request,
-                f"Job posting and {len(candidate_files)} candidate resume(s) received.",
-            )
-            return redirect("matcher:employer_results")
+            # DATA: AI comparison scored by the Logic Manager, saved in
+            # data/candidate_matches.json
+            try:
+                candidate_match = match_candidates_to_job(job_file, candidate_files)
+            except ValueError:
+                logger.exception("AI comparison reply could not be read")
+                messages.error(request, "Could not compare the resumes. Please try again.")
+            except Exception:
+                # Bad/missing API key, network down, rate limit, too large, etc.
+                logger.exception("AI comparison failed")
+                messages.error(
+                    request,
+                    "The AI service is unavailable right now. Please try again later.",
+                )
+            else:
+                # Remember this employer's match so the results page shows theirs only
+                request.session["candidate_match_id"] = candidate_match["id"]
+                messages.success(
+                    request,
+                    f"Compared {len(candidate_files)} candidate resume(s) against the job posting.",
+                )
+                return redirect("matcher:employer_results")
 
     return render(
         request,
@@ -164,14 +166,38 @@ def employer_upload(request):
     )
 
 
+def get_candidate_match(request):
+    """Return this employer's saved comparison from candidate_matches.json, or None.
+
+    Reads saved data only - no AI call.
+    """
+    candidate_match_id = request.session.get("candidate_match_id")
+    if not candidate_match_id:
+        return None
+    for record in load_records("candidate_matches"):
+        if record.get("id") == candidate_match_id:
+            return record
+    return None
+
+
 def employer_results(request):
     """Employer results: candidates ranked against the job posting."""
-    # DATA: ranked candidates shown on the page
-    candidates = get_ranked_candidates()
+    # DATA: the job posting's details (live mode only)
+    job = None
+    if is_live_mode():
+        candidate_match = get_candidate_match(request)
+        if candidate_match:
+            job = candidate_match.get("job")
+            # DATA: ranked candidates shown on the page (Logic Manager decides the order)
+            candidates = rank_candidates(candidate_match.get("candidates", []))
+        else:
+            candidates = []
+    else:
+        candidates = get_ranked_candidates()
     return render(
         request,
         "matcher/employer_results.html",
-        {"candidates": candidates},
+        {"candidates": candidates, "job": job},
     )
 
 

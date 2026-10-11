@@ -8,6 +8,26 @@
     <p class="page-header__lede">Ranked from strongest to weakest fit against the job posting.</p>
 </section>
 
+{% if job %}
+<section class="container">
+    <div class="job-summary">
+        <p class="eyebrow">Job posting</p>
+        <h2>{{ job.title|default:job.filename }}</h2>
+        <p class="result-card__company">
+            {% if job.company %}{{ job.company }}{% endif %}{% if job.company and job.industry %} · {% endif %}{{ job.industry }}
+        </p>
+        <p class="job-summary__details">
+            {% if job.location %}Location: {{ job.location }}{% endif %}
+            {% if job.work_arrangement %} · {{ job.work_arrangement }}{% endif %}
+            {% if job.working_hours %} · {{ job.working_hours }} hours{% endif %}
+        </p>
+        {% if job.required_skills %}
+        <p class="job-summary__details">Skills required: {{ job.required_skills|join:", " }}</p>
+        {% endif %}
+    </div>
+</section>
+{% endif %}
+
 <section class="container results-list">
     {% if candidates %}
         {% for candidate in candidates %}
@@ -24,7 +44,11 @@
             </div>
 
             <div class="result-card__body">
-                <h2>{{ candidate.name }}</h2>
+                <h2>
+                    {{ candidate.name }}
+                    {% if candidate.strong_match %}<span class="badge badge--strong">Strong Match</span>{% endif %}
+                </h2>
+                {% if job %}<p class="result-card__company">{{ candidate.filename }}</p>{% endif %}
                 <p class="result-card__summary">{{ candidate.summary }}</p>
 
                 <div class="result-grid">
@@ -41,14 +65,22 @@
                         <h3>Compatibility</h3>
                         <ul class="check-list">
                             <li class="check-list__item {% if candidate.experience_match %}check-list__item--yes{% else %}check-list__item--no{% endif %}">
-                                {{ candidate.experience|join:", " }}
+                                {{ candidate.experience|join:", "|default:"Experience not stated" }}
                             </li>
                             <li class="check-list__item {% if candidate.location_match %}check-list__item--yes{% else %}check-list__item--no{% endif %}">
-                                Location: {{ candidate.location }}
+                                Location: {{ candidate.location|default:"not stated" }}
                             </li>
                             <li class="check-list__item {% if candidate.work_arrangement_match %}check-list__item--yes{% else %}check-list__item--no{% endif %}">
                                 Work arrangement compatible
                             </li>
+                            {% if job %}
+                            <li class="check-list__item {% if candidate.education_match %}check-list__item--yes{% else %}check-list__item--no{% endif %}">
+                                Education: {{ candidate.education|join:", "|default:"not stated" }}
+                            </li>
+                            <li class="check-list__item {% if candidate.working_hours_match %}check-list__item--yes{% else %}check-list__item--no{% endif %}">
+                                Working hours compatible
+                            </li>
+                            {% endif %}
                         </ul>
                     </div>
 
