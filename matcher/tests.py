@@ -493,3 +493,37 @@ class CandidateScoringTests(TestCase):
             {"name": "High", "match_score": 80},
         ])
         self.assertEqual([(c["rank"], c["name"]) for c in ranked], [(1, "High"), (2, "Low"), (3, "Unreadable")])
+
+
+@override_settings(AI_MODE="mock")
+class CandidateMatchingServiceTests(TempDataDirMixin, TestCase):
+    def test_missing_ai_result_becomes_unreadable_candidate(self):
+        from unittest.mock import patch
+
+        from .managers.data_manager import load_records
+        from .services.matching_service import match_candidates_to_job
+
+        reply = json.dumps({"job": {"title": "Dev"}, "candidates": [
+            {"resume_number": 1, "name": "Ann", "matched_skills": ["Python"], "missing_skills": [],
+             "experience_match": True, "location_match": True},
+        ]})
+        with patch("matcher.services.matching_service.ask_ai_with_pdfs", return_value=reply):
+            with self.assertLogs("matcher.services.matching_service", level="WARNING"):
+                record = match_candidates_to_job(
+                    make_pdf_file("job.pdf"), [make_pdf_file("ann.pdf"), make_pdf_file("bad.pdf")],
+                )
+        ann, bad = record["candidates"]
+        self.assertEqual((ann["name"], ann["filename"], ann["match_score"], ann["strong_match"]), ("Ann", "ann.pdf", 75, True))
+        self.assertTrue(bad["unreadable"])
+        self.assertEqual(bad["filename"], "bad.pdf")
+        self.assertEqual(load_records("candidate_matches"), [record])
+
+    def test_unreadable_ai_reply_raises(self):
+        from unittest.mock import patch
+
+        from .services.matching_service import match_candidates_to_job
+
+        with patch("matcher.services.matching_service.ask_ai_with_pdfs", return_value="sorry"):
+            with self.assertLogs("matcher.managers.ai_manager", level="WARNING"):
+                with self.assertRaises(ValueError):
+                    match_candidates_to_job(make_pdf_file("job.pdf"), [make_pdf_file("a.pdf")])

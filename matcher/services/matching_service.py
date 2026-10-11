@@ -12,8 +12,9 @@ import re
 from django.conf import settings
 from django.utils import timezone
 
-from ..managers.ai_manager import ask_ai_text, parse_json_reply
+from ..managers.ai_manager import ask_ai_text, ask_ai_with_pdfs, parse_json_reply
 from ..managers.data_manager import load_records, save_record
+from ..managers.logic_manager import calculate_score, is_strong_match
 from ..managers.io_manager import (
     INDUSTRY_CHOICES,
     LOCATION_CHOICES,
@@ -159,4 +160,176 @@ def match_jobs_to_resume(resume_id=None):
     })
 
 
-# TODO (Sprint 3/4): match_candidates_to_job()
+# ---------- Employer: compare resumes to one job posting ----------
+
+CANDIDATE_COMPARISON_PROMPT = """
+You are helping an employer in Singapore screen candidates.
+
+You will receive one JOB POSTING PDF, then {resume_count} resume PDFs
+labelled RESUME 1 to RESUME {resume_count}. Compare EACH resume against the
+job posting. Do not score or rank them - only report what matches.
+
+Rules:
+- Return exactly one candidate per resume, using its resume_number.
+- matched_skills: skills the job asks for that the candidate has.
+- missing_skills: skills the job asks for that the candidate does not have.
+  Together they should cover all the job's required skills.
+- experience_match: true if the candidate's experience meets what the job asks for.
+- education_match: true if the candidate's education meets what the job asks for.
+- location_match / work_arrangement_match / working_hours_match: true if
+  the candidate's location / preference fits the job (true if the resume
+  does not say, false only if it clearly does not fit).
+- summary: one sentence on how well the candidate fits.
+- If a PDF is not a readable resume, still return it with name "" and empty lists.
+- Do not invent information that is not in the PDFs.
+- For location, work_arrangement, working_hours and industry use ONLY these
+  values (or "" if unknown):
+  location: {locations}
+  work_arrangement: {work_arrangements}
+  working_hours: {working_hours}
+  industry: {industries}
+
+Return ONLY valid JSON in this format:
+
+{{
+    "job": {{
+        "title": "",
+        "company": "",
+        "required_skills": [""],
+        "location": "",
+        "work_arrangement": "",
+        "working_hours": "",
+        "industry": ""
+    }},
+    "candidates": [
+        {{
+            "resume_number": 1,
+            "name": "",
+            "matched_skills": [""],
+            "missing_skills": [""],
+            "experience": ["Job title, X years"],
+            "education": [""],
+            "location": "",
+            "work_arrangement": "",
+            "working_hours": "",
+            "experience_match": false,
+            "education_match": false,
+            "location_match": false,
+            "work_arrangement_match": false,
+            "working_hours_match": false,
+            "summary": ""
+        }}
+    ]
+}}
+"""
+
+MATCH_FIELDS = (
+    "experience_match", "education_match", "location_match",
+    "work_arrangement_match", "working_hours_match",
+)
+
+
+def as_list(value):
+    """Keep a list of non-empty strings, whatever the AI sent."""
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def clean_candidate(ai_candidate, filename):
+    """Turn one AI candidate into a saved candidate with its score."""
+    candidate = {
+        "filename": filename,
+        "name": str(ai_candidate.get("name", "")).strip() or filename,
+        "matched_skills": as_list(ai_candidate.get("matched_skills")),
+        "missing_skills": as_list(ai_candidate.get("missing_skills")),
+        "experience": as_list(ai_candidate.get("experience")),
+        "education": as_list(ai_candidate.get("education")),
+        "location": pick(ai_candidate.get("location"), LOCATION_CHOICES),
+        "work_arrangement": pick(ai_candidate.get("work_arrangement"), WORK_ARRANGEMENT_CHOICES),
+        "working_hours": pick(ai_candidate.get("working_hours"), WORKING_HOURS_CHOICES),
+        "summary": str(ai_candidate.get("summary", "")).strip(),
+        "unreadable": False,
+        **{field: ai_candidate.get(field) is True for field in MATCH_FIELDS},
+    }
+    # Logic Manager decides the final score and the Strong Match label
+    candidate["match_score"] = calculate_score(candidate)
+    candidate["strong_match"] = is_strong_match(candidate)
+    return candidate
+
+
+def unreadable_candidate(filename):
+    """Placeholder for a resume the AI did not return - shown last with 0%."""
+    return {
+        "filename": filename,
+        "name": filename,
+        "matched_skills": [], "missing_skills": [], "experience": [], "education": [],
+        "location": "", "work_arrangement": "", "working_hours": "",
+        "summary": "Could not read this resume.",
+        "unreadable": True,
+        **{field: False for field in MATCH_FIELDS},
+        "match_score": 0,
+        "strong_match": False,
+    }
+
+
+def match_candidates_to_job(job_file, candidate_files):
+    """Compare several resumes to one job posting in ONE AI call, score them
+    with the Logic Manager and save the result.
+
+    Returns the saved record, e.g.
+    {"id": "C001", "job": {...}, "candidates": [{..., "match_score": 85}, ...]}.
+    Raises ValueError if the AI reply is unreadable, and lets AI/API errors
+    through for the caller to handle.
+    """
+    prompt = CANDIDATE_COMPARISON_PROMPT.format(
+        resume_count=len(candidate_files),
+        locations=", ".join(choice_values(LOCATION_CHOICES)),
+        work_arrangements=", ".join(choice_values(WORK_ARRANGEMENT_CHOICES)),
+        working_hours=", ".join(choice_values(WORKING_HOURS_CHOICES)),
+        industries=", ".join(choice_values(INDUSTRY_CHOICES)),
+    )
+    labelled_files = [("JOB POSTING", job_file)] + [
+        (f"RESUME {number}", resume_file)
+        for number, resume_file in enumerate(candidate_files, start=1)
+    ]
+
+    reply = parse_json_reply(ask_ai_with_pdfs(prompt, labelled_files))
+    if reply is None or not isinstance(reply.get("candidates"), list):
+        raise ValueError("AI comparison reply is not in the expected JSON format")
+
+    # DATA: AI candidates by resume number, so each one is matched to its file
+    by_number = {}
+    for ai_candidate in reply["candidates"]:
+        if isinstance(ai_candidate, dict):
+            try:
+                by_number.setdefault(int(ai_candidate.get("resume_number")), ai_candidate)
+            except (TypeError, ValueError):
+                continue
+
+    candidates = []
+    for number, resume_file in enumerate(candidate_files, start=1):
+        ai_candidate = by_number.get(number)
+        if ai_candidate is None:
+            logger.warning("AI returned no result for resume %s (%s)", number, resume_file.name)
+            candidates.append(unreadable_candidate(resume_file.name))
+        else:
+            candidates.append(clean_candidate(ai_candidate, resume_file.name))
+
+    ai_job = reply.get("job") if isinstance(reply.get("job"), dict) else {}
+    job = {
+        "filename": job_file.name,
+        "title": str(ai_job.get("title", "")).strip(),
+        "company": str(ai_job.get("company", "")).strip(),
+        "required_skills": as_list(ai_job.get("required_skills")),
+        "location": pick(ai_job.get("location"), LOCATION_CHOICES),
+        "work_arrangement": pick(ai_job.get("work_arrangement"), WORK_ARRANGEMENT_CHOICES),
+        "working_hours": pick(ai_job.get("working_hours"), WORKING_HOURS_CHOICES),
+        "industry": pick(ai_job.get("industry"), INDUSTRY_CHOICES),
+    }
+
+    return save_record("candidate_matches", {
+        "created_at": timezone.now().isoformat(timespec="seconds"),
+        "job": job,
+        "candidates": candidates,
+    })
