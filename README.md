@@ -137,10 +137,11 @@ Open **http://127.0.0.1:8000/**.
 ### 7. Run the tests
 
 ```bash
-python manage.py test matcher
+python run_tests.py
 ```
 
-You should see `Ran 51 tests ... OK`. The tests never call the real AI.
+You should see `Ran 49 tests ... OK`. Every test is a plain function in
+`matcher/tests.py`; none of them call the real AI or touch `data/`.
 
 ---
 
@@ -235,6 +236,7 @@ kept out of git.
 ```text
 INF1103_Group-3_Assgn1/
 ├── manage.py
+├── run_tests.py                    # Test script: python run_tests.py
 ├── requirements.txt
 ├── .env.example
 ├── config/                         # Django settings, urls, wsgi
@@ -245,7 +247,7 @@ INF1103_Group-3_Assgn1/
     ├── dummy_data.py               # Sample results for DATA_MODE=debug
     ├── context_processors.py       # Adds ?v= to CSS/JS links so browsers load new versions
     ├── models.py                   # Empty: no database models
-    ├── tests.py
+    ├── tests.py                    # Test functions, run by run_tests.py
     ├── managers/
     │   ├── io_manager.py           # Forms and upload checks
     │   ├── ai_manager.py           # Google Gemini calls
