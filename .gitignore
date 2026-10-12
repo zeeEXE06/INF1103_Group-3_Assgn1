@@ -12,10 +12,8 @@ venv/
 # Django
 db.sqlite3
 
-# Saved resumes (real people's details - don't commit)
-data/resumes*.json
-data/job_matches*.json
-data/candidate_matches*.json
+# Saved results - people's personal details, never commit
+data/
 
 # OS / editor
 .DS_Store
