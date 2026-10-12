@@ -66,3 +66,65 @@ def filter_jobs(jobs, work_arrangements, locations, working_hours, industry):
         filtered_jobs.append(job)
     return filtered_jobs
 
+
+# ---------- Employer: score and rank candidates ----------
+
+# DATA: how much each part counts towards a candidate's score (adds up to 100)
+SCORE_WEIGHTS = {
+    "skills": 40,
+    "experience": 25,
+    "education": 10,
+    "location": 10,
+    "work_arrangement": 10,
+    "working_hours": 5,
+}
+
+# "Strong Match" rule: skills at least this share of the job's skills AND
+# experience match AND location match
+STRONG_MATCH_SKILLS_RATIO = 0.7
+
+
+def skills_ratio(candidate):
+    """Share of the job's skills the candidate has, from 0.0 to 1.0."""
+    matched = len(candidate.get("matched_skills", []))
+    missing = len(candidate.get("missing_skills", []))
+    if matched + missing == 0:
+        return 0.0
+    return matched / (matched + missing)
+
+
+def calculate_score(candidate):
+    """Weighted match score from 0 to 100.
+
+    candidate: dict with matched_skills, missing_skills and the AI's
+    true/false checks (experience_match, education_match, location_match,
+    work_arrangement_match, working_hours_match).
+    """
+    score = SCORE_WEIGHTS["skills"] * skills_ratio(candidate)
+    for part in ("experience", "education", "location", "work_arrangement", "working_hours"):
+        if candidate.get(f"{part}_match"):
+            score += SCORE_WEIGHTS[part]
+    return round(score)
+
+
+def is_strong_match(candidate):
+    """Strong Match = skills >= 70% AND experience match AND location match."""
+    return (
+        skills_ratio(candidate) >= STRONG_MATCH_SKILLS_RATIO
+        and bool(candidate.get("experience_match"))
+        and bool(candidate.get("location_match"))
+    )
+
+
+def rank_candidates(candidates):
+    """Sort candidates best score first and number them 1, 2, 3...
+
+    Candidates whose resume could not be read go last.
+    Returns new dicts with "rank" added.
+    """
+    ranked = sorted(
+        candidates,
+        key=lambda c: (not c.get("unreadable", False), c.get("match_score", 0)),
+        reverse=True,
+    )
+    return [{**c, "rank": rank} for rank, c in enumerate(ranked, start=1)]

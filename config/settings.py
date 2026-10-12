@@ -106,6 +106,9 @@ DATA_DIR = BASE_DIR / "data"
 MAX_UPLOAD_SIZE_MB = int(os.environ.get("MAX_UPLOAD_SIZE_MB", "10"))
 ALLOWED_UPLOAD_EXTENSIONS = [".pdf"]
 
+# Most resumes an employer can compare in one upload (all sent in one AI request)
+MAX_CANDIDATES = int(os.environ.get("MAX_CANDIDATES", "10"))
+
 # Most Jobstreet jobs the AI job search returns for one resume
 MAX_JOBS = int(os.environ.get("MAX_JOBS", "15"))
 

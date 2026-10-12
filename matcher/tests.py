@@ -41,7 +41,8 @@ class LandingPageTests(TestCase):
         self.assertContains(response, "Employer")
 
 
-class EmployerWorkflowTests(TestCase):
+@override_settings(AI_MODE="mock")
+class EmployerWorkflowTests(TempDataDirMixin, TestCase):
     def test_upload_page_loads(self):
         response = self.client.get(reverse("matcher:employer_upload"))
         self.assertEqual(response.status_code, 200)
@@ -75,6 +76,49 @@ class EmployerWorkflowTests(TestCase):
             },
         )
         self.assertRedirects(response, reverse("matcher:employer_results"))
+
+    @override_settings(MAX_CANDIDATES=2)
+    def test_rejects_too_many_resumes(self):
+        response = self.client.post(
+            reverse("matcher:employer_upload"),
+            {
+                "job_file": make_pdf_file("job.pdf"),
+                "candidate_files": [make_pdf_file(f"c{i}.pdf") for i in range(3)],
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "at most 2 resumes")
+
+    @override_settings(DATA_MODE="live")
+    def test_live_results_show_ranked_candidates_with_strong_match(self):
+        response = self.client.post(
+            reverse("matcher:employer_upload"),
+            {
+                "job_file": make_pdf_file("job.pdf"),
+                # Uploaded weakest first - the page must still rank #1 first
+                "candidate_files": [make_pdf_file("c3.pdf"), make_pdf_file("c2.pdf"), make_pdf_file("c1.pdf")],
+            },
+            follow=True,
+        )
+        content = response.content.decode()
+        self.assertContains(response, "Junior Python Developer")  # job posting summary
+        self.assertContains(response, "Strong Match", count=1)
+        # Mock: resume 1 (c3.pdf) is the strong match, so it is ranked first
+        self.assertLess(content.index("c3.pdf"), content.index("c2.pdf"))
+        self.assertLess(content.index("c2.pdf"), content.index("c1.pdf"))
+
+    @override_settings(DATA_MODE="live")
+    def test_failed_ai_call_shows_error_and_stays_on_page(self):
+        from unittest.mock import patch
+
+        with patch("matcher.views.match_candidates_to_job", side_effect=RuntimeError("503")):
+            with self.assertLogs("matcher.views", level="ERROR"):
+                response = self.client.post(
+                    reverse("matcher:employer_upload"),
+                    {"job_file": make_pdf_file("job.pdf"), "candidate_files": [make_pdf_file("c1.pdf")]},
+                )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "The AI service is unavailable")
 
     @override_settings(DATA_MODE="debug")
     def test_results_page_shows_ranked_candidates(self):
@@ -243,6 +287,17 @@ class AIManagerTests(TestCase):
             with self.assertRaises(errors.ClientError):
                 generate("hi", None)
         self.assertEqual(client.models.generate_content.call_count, 1)
+
+    @override_settings(AI_MODE="live", AI_API_KEY="test")
+    def test_broken_json_reply_is_asked_again(self):
+        from unittest.mock import patch
+
+        from .managers.ai_manager import generate_json
+
+        with patch("matcher.managers.ai_manager.generate", side_effect=['{"broken', '{"ok": true}']) as gen:
+            with self.assertLogs("matcher.managers.ai_manager", level="WARNING"):
+                self.assertEqual(generate_json("hi", None), '{"ok": true}')
+        self.assertEqual(gen.call_count, 2)
 
     def test_parse_json_reply_strips_code_fences(self):
         from .managers.ai_manager import parse_json_reply
@@ -438,3 +493,81 @@ class LogicManagerTests(TestCase):
         self.assertEqual([j["title"] for j in filter_jobs(jobs, [], ["West"], [], "")], ["A"])
         self.assertEqual([j["title"] for j in filter_jobs(jobs, ["Hybrid"], [], ["Standard"], "Technology / IT")], ["B"])
         self.assertEqual(len(filter_jobs(jobs, [], [], [], "")), 2)
+
+
+class CandidateScoringTests(TestCase):
+    def candidate(self, matched=3, missing=0, **matches):
+        return {
+            "matched_skills": ["s"] * matched,
+            "missing_skills": ["m"] * missing,
+            **matches,
+        }
+
+    def test_full_match_scores_100(self):
+        from .managers.logic_manager import calculate_score
+
+        candidate = self.candidate(
+            experience_match=True, education_match=True, location_match=True,
+            work_arrangement_match=True, working_hours_match=True,
+        )
+        self.assertEqual(calculate_score(candidate), 100)
+
+    def test_weights(self):
+        from .managers.logic_manager import calculate_score
+
+        # Half the skills (20) + experience (25) + location (10)
+        candidate = self.candidate(matched=1, missing=1, experience_match=True, location_match=True)
+        self.assertEqual(calculate_score(candidate), 55)
+        self.assertEqual(calculate_score(self.candidate(matched=0, missing=0)), 0)
+
+    def test_strong_match_needs_skills_experience_and_location(self):
+        from .managers.logic_manager import is_strong_match
+
+        self.assertTrue(is_strong_match(self.candidate(7, 3, experience_match=True, location_match=True)))
+        self.assertFalse(is_strong_match(self.candidate(6, 4, experience_match=True, location_match=True)))
+        self.assertFalse(is_strong_match(self.candidate(3, 0, experience_match=False, location_match=True)))
+        self.assertFalse(is_strong_match(self.candidate(3, 0, experience_match=True, location_match=False)))
+
+    def test_rank_candidates_puts_unreadable_last(self):
+        from .managers.logic_manager import rank_candidates
+
+        ranked = rank_candidates([
+            {"name": "Unreadable", "match_score": 0, "unreadable": True},
+            {"name": "Low", "match_score": 10},
+            {"name": "High", "match_score": 80},
+        ])
+        self.assertEqual([(c["rank"], c["name"]) for c in ranked], [(1, "High"), (2, "Low"), (3, "Unreadable")])
+
+
+@override_settings(AI_MODE="mock")
+class CandidateMatchingServiceTests(TempDataDirMixin, TestCase):
+    def test_missing_ai_result_becomes_unreadable_candidate(self):
+        from unittest.mock import patch
+
+        from .managers.data_manager import load_records
+        from .services.matching_service import match_candidates_to_job
+
+        reply = json.dumps({"job": {"title": "Dev"}, "candidates": [
+            {"resume_number": 1, "name": "Ann", "matched_skills": ["Python"], "missing_skills": [],
+             "experience_match": True, "location_match": True},
+        ]})
+        with patch("matcher.services.matching_service.ask_ai_with_pdfs", return_value=reply):
+            with self.assertLogs("matcher.services.matching_service", level="WARNING"):
+                record = match_candidates_to_job(
+                    make_pdf_file("job.pdf"), [make_pdf_file("ann.pdf"), make_pdf_file("bad.pdf")],
+                )
+        ann, bad = record["candidates"]
+        self.assertEqual((ann["name"], ann["filename"], ann["match_score"], ann["strong_match"]), ("Ann", "ann.pdf", 75, True))
+        self.assertTrue(bad["unreadable"])
+        self.assertEqual(bad["filename"], "bad.pdf")
+        self.assertEqual(load_records("candidate_matches"), [record])
+
+    def test_unreadable_ai_reply_raises(self):
+        from unittest.mock import patch
+
+        from .services.matching_service import match_candidates_to_job
+
+        with patch("matcher.services.matching_service.ask_ai_with_pdfs", return_value="sorry"):
+            with self.assertLogs("matcher.managers.ai_manager", level="WARNING"):
+                with self.assertRaises(ValueError):
+                    match_candidates_to_job(make_pdf_file("job.pdf"), [make_pdf_file("a.pdf")])
