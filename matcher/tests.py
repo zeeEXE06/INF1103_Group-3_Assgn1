@@ -10,6 +10,7 @@ checks. run_tests.py gives each test its own empty data folder.
 
 import io
 import json
+import re
 from unittest.mock import MagicMock, patch
 
 from django.conf import settings
@@ -316,6 +317,13 @@ def job_results(client, filters=None):
     return text(client.get(reverse("matcher:job_results"), filters or {}))
 
 
+def shown_results(page):
+    """The match scores and names on a results page, in the order shown."""
+    scores = re.findall(r'score-ring__value">(\d+)%', page)
+    names = re.findall(r'<h2>\s*([^<]+?)\s*<', page)
+    return scores, names
+
+
 def test_job_results_show_suggested_jobs_with_links():
     with fake_gemini(RESUME_REPLY, JOBS_REPLY):
         page = text(upload_resume(Client(), follow=True))
@@ -374,6 +382,38 @@ def test_changing_filters_does_not_call_the_ai():
         job_results(client, {"locations": ["Central"]})
         job_results(client, {"industry": "Technology / IT"})
     gemini.assert_not_called()
+
+
+# ---------- Same output across runs ----------
+
+def test_same_resume_gives_same_results_without_asking_the_ai_again():
+    first = job_results(uploaded_client())  # 2 AI calls: read the resume, suggest jobs
+    with fake_gemini() as gemini:  # no replies left - any AI call would fail
+        second = text(upload_resume(Client(), follow=True))
+    assert gemini.call_count == 0
+    assert len(shown_results(first)[0]) == 3
+    assert shown_results(second) == shown_results(first)
+    assert len(load_records("resumes")) == 1 and len(load_records("job_matches")) == 1
+
+
+def test_different_resume_is_sent_to_the_ai():
+    uploaded_client()
+    other = SimpleUploadedFile("other.pdf", b"%PDF-1.4 another resume", content_type="application/pdf")
+    with fake_gemini(RESUME_REPLY, JOBS_REPLY) as gemini:
+        Client().post(reverse("matcher:job_seeker_upload"), {"resume_file": other})
+    assert gemini.call_count == 2
+    assert len(load_records("resumes")) == 2
+
+
+def test_same_employer_files_give_same_ranking_without_asking_the_ai_again():
+    with fake_gemini(comparison_reply(2)):
+        first = text(upload_employer_files(Client(), ["c1.pdf", "c2.pdf"], follow=True))
+    with fake_gemini() as gemini:
+        second = text(upload_employer_files(Client(), ["c1.pdf", "c2.pdf"], follow=True))
+    assert gemini.call_count == 0
+    assert len(shown_results(first)[0]) == 2
+    assert shown_results(second) == shown_results(first)
+    assert len(load_records("candidate_matches")) == 1
 
 
 # ---------- AI Manager ----------

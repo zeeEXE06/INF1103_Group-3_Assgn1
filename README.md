@@ -35,6 +35,9 @@ A Django web app that matches resumes and jobs using Google Gemini.
 - If Gemini is busy, the app retries and then tries a backup model. Replies
   that aren't valid JSON or have the wrong structure are rejected and asked
   for again.
+- **Same input, same output.** Gemini runs at temperature 0, and every
+  uploaded PDF is fingerprinted: uploading the same file (or the same set of
+  files) again returns the saved result instead of asking the AI again.
 
 ---
 

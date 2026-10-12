@@ -1,11 +1,16 @@
 """
 Matching service - the three AI flows, connecting the AI, Logic and Data Managers.
 
+The same input always gives the same output: every uploaded PDF is
+fingerprinted, and if the same file (or set of files) was processed before,
+the saved result is returned instead of asking the AI again.
+
     read_resume()             job seeker's resume PDF -> saved resume details
     match_jobs_to_resume()    saved resume -> suggested jobs with Jobstreet links
     match_candidates_to_job() job posting + resume PDFs -> scored candidates
 """
 
+import hashlib
 import logging
 import re
 
@@ -13,7 +18,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from ..managers.ai_manager import compare_candidates, extract_resume, suggest_jobs
-from ..managers.data_manager import load_records, save_record
+from ..managers.data_manager import filter_records, load_records, save_record
 from ..managers.io_manager import (
     INDUSTRY_CHOICES,
     LOCATION_CHOICES,
@@ -56,6 +61,24 @@ def now():
     return timezone.now().isoformat(timespec="seconds")
 
 
+def file_hash(uploaded_file):
+    """Fingerprint of a file's contents (SHA-256), the same for identical files."""
+    digest = hashlib.sha256()
+    for chunk in uploaded_file.chunks():
+        digest.update(chunk)
+    uploaded_file.seek(0)
+    return digest.hexdigest()
+
+
+def previous_result(collection, **fields):
+    """The newest saved record with these field values, or None."""
+    matches = filter_records(collection, **fields)
+    if matches:
+        logger.info("Same input as %s %s - reusing the saved result", collection, matches[-1]["id"])
+        return matches[-1]
+    return None
+
+
 # ---------- Job seeker: read the resume ----------
 
 def read_resume(resume_file):
@@ -64,11 +87,17 @@ def read_resume(resume_file):
     Returns the saved record, e.g. {"id": "R001", "filename": ..., "skills": [...]}.
     Raises ValueError if the AI could not read it.
     """
+    resume_hash = file_hash(resume_file)
+    previous = previous_result("resumes", file_hash=resume_hash)
+    if previous:
+        return previous
+
     resume_data = extract_resume(resume_file)
     if resume_data is None:
         raise ValueError("The AI could not read the resume")
 
     return save_record("resumes", {
+        "file_hash": resume_hash,
         "filename": resume_file.name,
         "uploaded_at": now(),
         "education": resume_data.get("education", []),
@@ -101,6 +130,10 @@ def match_jobs_to_resume(resume_id=None):
     resume = resumes[-1]
 
     max_jobs = settings.MAX_JOBS
+    previous = previous_result("job_matches", resume_id=resume["id"], max_jobs=max_jobs)
+    if previous:
+        return previous
+
     reply = suggest_jobs(resume, max_jobs, filter_options())
     if reply is None:
         raise ValueError("The AI could not suggest jobs")
@@ -124,6 +157,7 @@ def match_jobs_to_resume(resume_id=None):
 
     return save_record("job_matches", {
         "resume_id": resume["id"],
+        "max_jobs": max_jobs,
         "searched_at": now(),
         "jobs": select_top_jobs(jobs, max_jobs),
     })
@@ -182,6 +216,12 @@ def match_candidates_to_job(job_file, candidate_files):
     {"id": "C001", "job": {...}, "candidates": [{..., "match_score": 85}, ...]}.
     Raises ValueError if the AI could not compare them.
     """
+    # The job posting's fingerprint, then each resume's, in upload order
+    file_hashes = [file_hash(job_file)] + [file_hash(f) for f in candidate_files]
+    previous = previous_result("candidate_matches", file_hashes=file_hashes)
+    if previous:
+        return previous
+
     reply = compare_candidates(job_file, candidate_files, filter_options())
     if reply is None:
         raise ValueError("The AI could not compare the resumes")
@@ -213,6 +253,7 @@ def match_candidates_to_job(job_file, candidate_files):
     }
 
     return save_record("candidate_matches", {
+        "file_hashes": file_hashes,
         "created_at": now(),
         "job": job,
         "candidates": candidates,
