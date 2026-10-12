@@ -1,18 +1,14 @@
 """
-Logic Manager - scores, ranks and filters the matches.
+Logic Manager - ranks and filters jobs, and scores and ranks candidates.
 
-Sprint 1: filter_jobs() works. Scoring and ranking not built yet -
-          dummy_data.py gives already-ranked sample data.
-Sprint 3: build the scoring (Skills 40%, Experience 25%, Education 10%,
-          Location 10%, Work Arrangement 10%, Working Hours 5%), the
-          "Strong Match" rule and the ranking.
-Sprint 4: use the AI Manager's output as input.
-
-This file does not call the AI API or read files directly.
+It never calls the AI or reads files.
 """
 
-# DATA: fields every AI-suggested job has on the results page, with defaults
-# for older saved records that are missing some of them
+
+# ---------- Job seeker: rank and filter jobs ----------
+
+# Fields every job on the results page has, with defaults for older saved
+# records that are missing some of them
 JOB_DEFAULTS = {
     "title": "",
     "url": "",
@@ -27,7 +23,7 @@ JOB_DEFAULTS = {
 
 
 def get_field(job, name):
-    """Read a field from a job saved as a dict (job_matches.json) or an object (sample data)."""
+    """Read a field from a saved job (dict) or a sample job (object)."""
     if isinstance(job, dict):
         return job.get(name, "")
     return getattr(job, name, "")
@@ -49,9 +45,8 @@ def rank_jobs(jobs):
 def filter_jobs(jobs, work_arrangements, locations, working_hours, industry):
     """Keep only the jobs that match the chosen filters.
 
-    Works on the saved jobs from job_matches.json, so filtering never needs
-    another AI call. An empty filter (nothing ticked / "" for industry)
-    means "show all".
+    Works on saved jobs, so changing filters never needs another AI call.
+    An empty filter (nothing ticked, or "" for industry) means "show all".
     """
     filtered_jobs = []
     for job in jobs:
@@ -69,7 +64,7 @@ def filter_jobs(jobs, work_arrangements, locations, working_hours, industry):
 
 # ---------- Employer: score and rank candidates ----------
 
-# DATA: how much each part counts towards a candidate's score (adds up to 100)
+# How much each part counts towards a candidate's score (adds up to 100)
 SCORE_WEIGHTS = {
     "skills": 40,
     "experience": 25,
@@ -79,8 +74,7 @@ SCORE_WEIGHTS = {
     "working_hours": 5,
 }
 
-# "Strong Match" rule: skills at least this share of the job's skills AND
-# experience match AND location match
+# Strong Match needs at least this share of the job's skills
 STRONG_MATCH_SKILLS_RATIO = 0.7
 
 
