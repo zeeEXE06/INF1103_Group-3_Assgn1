@@ -158,7 +158,7 @@ class JobSeekerWorkflowTests(TempDataDirMixin, TestCase):
 
         from .managers.data_manager import load_records
 
-        with patch("matcher.views.ask_ai", return_value="Sorry, I can't help."):
+        with patch("matcher.services.matching_service.ask_ai", return_value="Sorry, I can't help."):
             response = self.client.post(
                 reverse("matcher:job_seeker_upload"),
                 {"resume_file": make_pdf_file("resume.pdf")},
@@ -172,7 +172,7 @@ class JobSeekerWorkflowTests(TempDataDirMixin, TestCase):
 
         from .managers.data_manager import load_records
 
-        with patch("matcher.views.ask_ai", side_effect=RuntimeError("401 Unauthorized")):
+        with patch("matcher.services.matching_service.ask_ai", side_effect=RuntimeError("401 Unauthorized")):
             with self.assertLogs("matcher.views", level="ERROR"):
                 response = self.client.post(
                     reverse("matcher:job_seeker_upload"),
@@ -459,7 +459,7 @@ class JobSuggestionResultsTests(TempDataDirMixin, TestCase):
 
         self.upload_resume()
         with patch("matcher.services.matching_service.ask_ai_text") as ai_text, \
-                patch("matcher.views.ask_ai") as ai_pdf:
+                patch("matcher.services.matching_service.ask_ai") as ai_pdf:
             self.client.get(reverse("matcher:job_results"), {"locations": ["Central"]})
             self.client.get(reverse("matcher:job_results"), {"industry": "Technology / IT"})
         ai_text.assert_not_called()

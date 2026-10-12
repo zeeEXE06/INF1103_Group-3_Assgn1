@@ -1,12 +1,8 @@
 """
-Views - each page checks the input and shows a template.
+Views - each page checks the input, calls the matching service and shows a template.
 
-Sprint 1: uploads are checked but not saved. Results pages use sample data
-from dummy_data.py in debug mode, or show nothing in live mode
-(see DATA_MODE in config/settings.py).
-Sprint 2: save the uploaded data with the Data Manager.
-Sprint 3: score and rank results with the Logic Manager.
-Sprint 4: analyse resumes and jobs with the AI Manager.
+DATA_MODE=debug shows the sample results from dummy_data.py; DATA_MODE=live
+shows the visitor's own saved results.
 """
 
 import logging
@@ -14,11 +10,9 @@ import logging
 from django.conf import settings
 from django.contrib import messages
 from django.shortcuts import redirect, render
-from django.utils import timezone
 
 from .dummy_data import sample_ranked_candidates, sample_ranked_jobs
-from .managers.ai_manager import ask_ai, parse_json_reply
-from .managers.data_manager import load_records, save_record
+from .managers.data_manager import load_records
 from .managers.io_manager import (
     JobFilterForm,
     JobPostingForm,
@@ -26,89 +20,25 @@ from .managers.io_manager import (
     validate_candidate_files,
 )
 from .managers.logic_manager import filter_jobs, rank_candidates, rank_jobs
-from .services.matching_service import match_candidates_to_job, match_jobs_to_resume
+from .services.matching_service import match_candidates_to_job, match_jobs_to_resume, read_resume
 
 logger = logging.getLogger(__name__)
 
+AI_UNAVAILABLE = "The AI service is unavailable right now. Please try again later."
 
-# Prompt sent to the AI Manager with the job seeker's resume PDF
-RESUME_EXTRACTION_PROMPT = """
-Analyze the uploaded resume.
-
-Extract the candidate's education & experience information.
-
-Look for education information such as:
-- Degrees
-- Diplomas
-- Certificates
-- Fields of study
-- Schools or universities
-- Dates of study
-
-Look for experience information such as:
-- Job titles
-- Companies
-- Dates of employment
-
-Look for skills also and fill them into JSON accordingly.
-
-Return ONLY valid JSON in this format:
-
-{
-    "education": [
-        {
-            "qualification": "",
-            "institution": "",
-            "field_of_study": "",
-            "start_date": "",
-            "end_date": ""
-        }
-    ],
-    "experience": [
-        {
-            "job_title": "",
-            "company": "",
-            "start_date": "",
-            "end_date": ""
-        }
-    ],
-    "skills": [
-        {
-            "skill": ""
-        }
-    ]
-}
-
-If none of the information is found, return the following JSON with
-empty arrays if applicable:
-{
-    "education": [],
-    "experience": [],
-    "skills": []
-}
-
-Do not invent information that is not present in the resume.
-"""
-
-
-# ---------- Data mode (debug = fixed sample data, live = real data) ----------
 
 def is_live_mode():
     return settings.DATA_MODE == "live"
 
 
-def get_ranked_candidates():
-    """Return the sample ranked candidates (debug mode)."""
-    return sample_ranked_candidates()
-
-
-def get_ranked_jobs():
-    """Return the ranked jobs for the job seeker results page."""
-    if is_live_mode():
-        # TODO (Sprint 2/3): load jobs with the Data Manager and rank
-        # them with the Logic Manager. Empty until then.
-        return []
-    return sample_ranked_jobs()
+def find_record(collection, record_id):
+    """Return the saved record with this id, or None."""
+    if not record_id:
+        return None
+    for record in load_records(collection):
+        if record.get("id") == record_id:
+            return record
+    return None
 
 
 def landing(request):
@@ -123,32 +53,22 @@ def employer_upload(request):
 
     if request.method == "POST":
         job_form = JobPostingForm(request.POST, request.FILES)
-
-        # DATA: list of candidate resume PDFs uploaded by the employer
         candidate_files = request.FILES.getlist("candidate_files")
-
         candidate_errors = validate_candidate_files(candidate_files)
 
         if job_form.is_valid() and not candidate_errors:
-            # DATA: job description PDF uploaded by the employer
             job_file = job_form.cleaned_data["job_file"]
-
-            # DATA: AI comparison scored by the Logic Manager, saved in
-            # data/candidate_matches.json
             try:
                 candidate_match = match_candidates_to_job(job_file, candidate_files)
             except ValueError:
                 logger.exception("AI comparison reply could not be read")
                 messages.error(request, "Could not compare the resumes. Please try again.")
             except Exception:
-                # Bad/missing API key, network down, rate limit, too large, etc.
+                # Bad/missing API key, network down, rate limit, files too large, etc.
                 logger.exception("AI comparison failed")
-                messages.error(
-                    request,
-                    "The AI service is unavailable right now. Please try again later.",
-                )
+                messages.error(request, AI_UNAVAILABLE)
             else:
-                # Remember this employer's match so the results page shows theirs only
+                # Remember this employer's result so the results page shows theirs only
                 request.session["candidate_match_id"] = candidate_match["id"]
                 messages.success(
                     request,
@@ -159,41 +79,21 @@ def employer_upload(request):
     return render(
         request,
         "matcher/employer.html",
-        {
-            "job_form": job_form,
-            "candidate_errors": candidate_errors,
-        },
+        {"job_form": job_form, "candidate_errors": candidate_errors},
     )
 
 
-def get_candidate_match(request):
-    """Return this employer's saved comparison from candidate_matches.json, or None.
-
-    Reads saved data only - no AI call.
-    """
-    candidate_match_id = request.session.get("candidate_match_id")
-    if not candidate_match_id:
-        return None
-    for record in load_records("candidate_matches"):
-        if record.get("id") == candidate_match_id:
-            return record
-    return None
-
-
 def employer_results(request):
-    """Employer results: candidates ranked against the job posting."""
-    # DATA: the job posting's details (live mode only)
+    """Employer results: candidates ranked against the job posting (no AI call)."""
     job = None
     if is_live_mode():
-        candidate_match = get_candidate_match(request)
+        candidate_match = find_record("candidate_matches", request.session.get("candidate_match_id"))
+        candidates = []
         if candidate_match:
             job = candidate_match.get("job")
-            # DATA: ranked candidates shown on the page (Logic Manager decides the order)
             candidates = rank_candidates(candidate_match.get("candidates", []))
-        else:
-            candidates = []
     else:
-        candidates = get_ranked_candidates()
+        candidates = sample_ranked_candidates()
     return render(
         request,
         "matcher/employer_results.html",
@@ -206,38 +106,18 @@ def job_seeker_upload(request):
     if request.method == "POST":
         form = ResumeUploadForm(request.POST, request.FILES)
         if form.is_valid():
-            # DATA: job seeker's resume PDF
             resume_file = form.cleaned_data["resume_file"]
-
-            # DATA: AI Manager's reply as JSON text (mock reply unless AI_MODE=live)
             try:
-                ai_result = ask_ai(RESUME_EXTRACTION_PROMPT, resume_file)
+                resume = read_resume(resume_file)
+            except ValueError:
+                messages.error(request, "Could not read the resume. Please try again.")
+                return render(request, "matcher/job_seeker.html", {"form": form})
             except Exception:
                 # Bad/missing API key, network down, rate limit, etc.
                 logger.exception("AI call failed for %s", resume_file.name)
-                messages.error(
-                    request,
-                    "The AI service is unavailable right now. Please try again later.",
-                )
+                messages.error(request, AI_UNAVAILABLE)
                 return render(request, "matcher/job_seeker.html", {"form": form})
 
-            # DATA: education/experience/skills parsed from the reply (None if broken)
-            resume_data = parse_json_reply(ai_result)
-            if resume_data is None:
-                messages.error(request, "Could not read the resume. Please try again.")
-                return render(request, "matcher/job_seeker.html", {"form": form})
-
-            # DATA: saved resume record, e.g. {"id": "R001", "filename": ..., "skills": [...]}
-            resume = save_record("resumes", {
-                "filename": resume_file.name,
-                "uploaded_at": timezone.now().isoformat(timespec="seconds"),
-                "education": resume_data.get("education", []),
-                "experience": resume_data.get("experience", []),
-                "skills": resume_data.get("skills", []),
-            })
-
-            # DATA: job titles suggested by the AI with Jobstreet search links,
-            # saved in data/job_matches.json
             try:
                 job_match = match_jobs_to_resume(resume["id"])
             except Exception:
@@ -249,7 +129,7 @@ def job_seeker_upload(request):
                 )
                 return redirect("matcher:job_results")
 
-            # Remember this visitor's match so the results page shows their jobs only
+            # Remember this visitor's result so the results page shows theirs only
             request.session["job_match_id"] = job_match["id"]
             messages.success(
                 request,
@@ -262,45 +142,25 @@ def job_seeker_upload(request):
     return render(request, "matcher/job_seeker.html", {"form": form})
 
 
-def get_job_suggestions(request):
-    """Return the saved AI job suggestions for this visitor's last upload, best first.
-
-    Reads data/job_matches.json via the Data Manager - no AI call. Each job is a
-    dict with rank, title, url, match_score, location, work_arrangement,
-    working_hours, industry, matched_skills and match_reason.
-    Empty if the visitor has not uploaded a resume (or the match was not found).
-    """
-    job_match_id = request.session.get("job_match_id")
-    if not job_match_id:
-        return []
-
-    for record in load_records("job_matches"):
-        if record.get("id") == job_match_id:
-            return rank_jobs(record.get("jobs", []))
-    return []
-
-
 def job_results(request):
-    """Job seeker results: jobs ranked against the resume, with filters."""
-    # DATA: all ranked jobs, before filtering. Live mode = the AI's suggested
-    # job titles saved in job_matches.json; debug mode = sample jobs.
-    # Filtering only reads saved data, so changing filters never calls the AI.
+    """Job seeker results: suggested jobs, best first, with filters (no AI call)."""
     if is_live_mode():
-        all_jobs = get_job_suggestions(request)
+        job_match = find_record("job_matches", request.session.get("job_match_id"))
+        all_jobs = rank_jobs(job_match.get("jobs", [])) if job_match else []
     else:
-        all_jobs = get_ranked_jobs()
+        all_jobs = sample_ranked_jobs()
 
     # Filters come from the URL, e.g. ?locations=North&industry=Technology+%2F+IT
     filter_form = JobFilterForm(request.GET)
     if filter_form.is_valid():
-        # DATA: job seeker's chosen filters (empty = show all)
-        work_arrangements = filter_form.cleaned_data["work_arrangement"]  # e.g. ["WFH"]
-        locations = filter_form.cleaned_data["locations"]                 # e.g. ["North", "Central"]
-        working_hours = filter_form.cleaned_data["working_hours"]         # e.g. ["Flexible"]
-        industry = filter_form.cleaned_data["industry"]                   # e.g. "Technology / IT"
-
-        # DATA: jobs left after filtering
-        jobs = filter_jobs(all_jobs, work_arrangements, locations, working_hours, industry)
+        data = filter_form.cleaned_data
+        jobs = filter_jobs(
+            all_jobs,
+            data["work_arrangement"],
+            data["locations"],
+            data["working_hours"],
+            data["industry"],
+        )
     else:
         # Bad filter values in the URL - ignore them and show everything
         jobs = all_jobs
