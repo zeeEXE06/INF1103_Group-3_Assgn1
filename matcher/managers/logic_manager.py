@@ -29,6 +29,30 @@ def get_field(job, name):
     return getattr(job, name, "")
 
 
+def to_score(value):
+    """Turn a match score into a whole number from 0 to 100 (0 if it isn't a number)."""
+    try:
+        return max(0, min(100, round(float(value))))
+    except (TypeError, ValueError):
+        return 0
+
+
+def select_top_jobs(jobs, max_jobs):
+    """Keep the best max_jobs jobs, one per link, best match first.
+
+    Jobs with the same url (e.g. the same title in different letter case)
+    count once - the first one is kept.
+    """
+    unique_jobs = []
+    seen_urls = set()
+    for job in jobs:
+        if job["url"] not in seen_urls:
+            seen_urls.add(job["url"])
+            unique_jobs.append(job)
+    ranked = sorted(unique_jobs, key=lambda job: job["match_score"], reverse=True)
+    return ranked[:max_jobs]
+
+
 def rank_jobs(jobs):
     """Sort saved jobs best match first and number them 1, 2, 3...
 

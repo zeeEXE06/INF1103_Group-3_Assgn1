@@ -21,7 +21,7 @@ from ..managers.io_manager import (
     WORK_ARRANGEMENT_CHOICES,
     WORKING_HOURS_CHOICES,
 )
-from ..managers.logic_manager import calculate_score, is_strong_match
+from ..managers.logic_manager import calculate_score, is_strong_match, select_top_jobs, to_score
 
 logger = logging.getLogger(__name__)
 
@@ -48,14 +48,6 @@ def filter_options():
 def pick(value, choices):
     """Keep the AI's value only if it is one of the filter options, else ""."""
     return value if value in choice_values(choices) else ""
-
-
-def to_score(value):
-    """Turn the AI's match_score into a whole number from 0 to 100."""
-    try:
-        return max(0, min(100, round(float(value))))
-    except (TypeError, ValueError):
-        return 0
 
 
 def as_list(value):
@@ -209,20 +201,14 @@ def match_jobs_to_resume(resume_id=None):
     if reply is None or not isinstance(reply.get("jobs"), list):
         raise ValueError("AI job title reply is not in the expected JSON format")
 
-    # One Jobstreet link per title, best match first, at most MAX_JOBS
     jobs = []
-    seen_urls = set()
     for job in reply["jobs"]:
         title = str(job.get("title", "")).strip() if isinstance(job, dict) else ""
         if not title:
             continue
-        url = jobstreet_search_url(title)
-        if url in seen_urls:
-            continue
-        seen_urls.add(url)
         jobs.append({
             "title": title,
-            "url": url,
+            "url": jobstreet_search_url(title),
             "match_score": to_score(job.get("match_score")),
             "location": pick(job.get("location"), LOCATION_CHOICES),
             "work_arrangement": pick(job.get("work_arrangement"), WORK_ARRANGEMENT_CHOICES),
@@ -231,12 +217,11 @@ def match_jobs_to_resume(resume_id=None):
             "matched_skills": job.get("matched_skills", []),
             "match_reason": job.get("match_reason", ""),
         })
-    jobs = sorted(jobs, key=lambda job: job["match_score"], reverse=True)[:max_jobs]
 
     return save_record("job_matches", {
         "resume_id": resume["id"],
         "searched_at": now(),
-        "jobs": jobs,
+        "jobs": select_top_jobs(jobs, max_jobs),
     })
 
 

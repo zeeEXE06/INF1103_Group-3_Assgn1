@@ -24,6 +24,8 @@ from .managers.logic_manager import (
     is_strong_match,
     rank_candidates,
     rank_jobs,
+    select_top_jobs,
+    to_score,
 )
 from .services.matching_service import match_candidates_to_job, match_jobs_to_resume
 
@@ -419,6 +421,19 @@ class JobSuggestionResultsTests(TempDataDirMixin, TestCase):
 
 
 class LogicManagerTests(TestCase):
+    def test_select_top_jobs_removes_duplicates_sorts_and_caps(self):
+        jobs = [
+            {"title": "A", "url": "/a", "match_score": 50},
+            {"title": "a", "url": "/a", "match_score": 99},
+            {"title": "B", "url": "/b", "match_score": 80},
+            {"title": "C", "url": "/c", "match_score": 70},
+        ]
+        self.assertEqual([j["title"] for j in select_top_jobs(jobs, 2)], ["B", "C"])
+        self.assertEqual([j["title"] for j in select_top_jobs(jobs, 10)], ["B", "C", "A"])
+
+    def test_to_score_keeps_scores_between_0_and_100(self):
+        self.assertEqual([to_score(v) for v in (82, "40.6", 150, -5, None, "high")], [82, 41, 100, 0, 0, 0])
+
     def test_rank_jobs_sorts_by_score_and_fills_missing_fields(self):
         ranked = rank_jobs([{"title": "B", "match_score": 50}, {"title": "A", "match_score": 90}])
         self.assertEqual([(j["rank"], j["title"]) for j in ranked], [(1, "A"), (2, "B")])
