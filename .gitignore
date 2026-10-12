@@ -11,8 +11,6 @@ venv/
 
 # Django
 db.sqlite3
-media/uploads/*
-!media/uploads/.gitkeep
 
 # Saved resumes (real people's details - don't commit)
 data/resumes*.json

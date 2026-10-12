@@ -81,14 +81,10 @@ TIME_ZONE = "Asia/Singapore"
 USE_I18N = True
 USE_TZ = True
 
-# --- Static & media files ----------------------------------------------------
+# --- Static files ------------------------------------------------------------
 
 STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "matcher" / "static"]
-
-MEDIA_URL = "media/"
-MEDIA_ROOT = BASE_DIR / "media"
-UPLOAD_DIR = MEDIA_ROOT / "uploads"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -104,7 +100,6 @@ DATA_DIR = BASE_DIR / "data"
 
 # Upload limits, checked by the I/O Manager
 MAX_UPLOAD_SIZE_MB = int(os.environ.get("MAX_UPLOAD_SIZE_MB", "10"))
-ALLOWED_UPLOAD_EXTENSIONS = [".pdf"]
 
 # Most resumes an employer can compare in one upload (all sent in one AI request)
 MAX_CANDIDATES = int(os.environ.get("MAX_CANDIDATES", "10"))
