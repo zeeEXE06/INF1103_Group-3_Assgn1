@@ -1,46 +1,77 @@
 # Resume & Job Matcher
 
-An AI-powered resume and job matching web app, built with Django.
+A Django web app that matches resumes and jobs using Google Gemini.
 
-This repo is being built in four sprints:
-
-1. **UI** ← you are here
-2. **Database** (Data Manager: CSV/JSON persistence)
-3. **Logic** (Logic Manager: scoring, ranking, business rules)
-4. **AI** (AI Manager: mock/demo mode first)
-
-Docker is added at the very end, once all four sprints work.
+- **Job seekers** upload a resume and get a ranked list of suitable job
+  titles, each linking to the matching openings on Jobstreet Singapore.
+- **Employers** upload one job posting and several resumes and get the
+  candidates scored and ranked against the job.
 
 ---
 
-## Sprint 1 — UI (current state)
+## Features
 
-What's real in this sprint:
+**Job seeker**
 
-- Full Django project, runnable end-to-end
-- Landing page → Employer workflow / Job Seeker workflow
-- Employer: upload a job posting PDF + multiple candidate resume PDFs
-  (drag-and-drop, validated: must be `.pdf`, non-empty, under 10MB)
-- Job seeker: upload a resume PDF
-- Job results page: filter jobs by work arrangement / location(s) /
-  working hours / industry
-- Both results pages: ranked cards with match score, matched/missing
-  skills, compatibility checks, empty states
-- 19 automated tests covering page loads, upload validation,
-  successful-submission redirects, the debug/live data mode toggle,
-  the job filters, and the AI Manager's mock mode
+- Upload a resume PDF. Gemini reads its education, experience and skills.
+- Get up to `MAX_JOBS` suggested job titles, best match first, each with a
+  match %, the skills that match, a short reason and a Jobstreet link.
+- Filter the results by work arrangement, location, working hours and
+  industry. Filtering uses the saved results, so it never calls the AI again.
 
-What's **not** real yet (by design — later sprints):
+**Employer**
 
-- Uploaded files are validated but not read, stored, or processed —
-  see [Where uploaded data goes](#where-uploaded-data-goes)
-- In `debug` mode results pages show sample data; in `live` mode they're
-  empty — see [Debug vs live mode](#debug-vs-live-mode)
-- No database persistence (Data Manager — Sprint 2)
-- No scoring/ranking logic (Logic Manager — Sprint 3)
-- No AI analysis, even mocked (AI Manager — Sprint 4)
-- The `matcher/managers/` and `matcher/services/` modules exist as
-  documented placeholders for those sprints
+- Upload one job posting PDF and up to `MAX_CANDIDATES` resume PDFs.
+- Gemini compares every resume with the job in one request.
+- Each candidate gets a score, matched and missing skills, a ✓/✗ for each
+  requirement and a **Strong Match** badge when they qualify.
+
+**Both**
+
+- Drag-and-drop uploads, checked to be non-empty PDFs under the size limit.
+- `AI_MODE=mock` runs the whole app with fixed sample replies and no API key.
+- If Gemini is busy, the app retries and then tries a backup model. If the
+  AI still fails, the user sees a clear message instead of an error page.
+
+---
+
+## How it works
+
+```text
+            views.py  (pages, messages)
+                │
+                ▼
+     services/matching_service.py   (the three AI flows)
+        │            │            │
+        ▼            ▼            ▼
+   ai_manager   data_manager   logic_manager        io_manager
+   (Gemini)     (data/*.json)  (score, rank,        (forms and
+                               filter)              upload checks)
+```
+
+| Module | Job |
+|---|---|
+| `managers/io_manager.py` | Upload and filter forms, PDF checks |
+| `managers/ai_manager.py` | Sends prompts and PDFs to Gemini, retries, reads the JSON reply. No business logic. |
+| `managers/data_manager.py` | The only code that reads and writes `data/*.json`. Missing or broken files never crash the app. |
+| `managers/logic_manager.py` | Scores and ranks candidates, ranks and filters jobs. Never calls the AI or reads files. |
+| `services/matching_service.py` | `read_resume()`, `match_jobs_to_resume()`, `match_candidates_to_job()` |
+
+### Candidate scoring (employer)
+
+The AI only reports what matches. The Logic Manager decides the score:
+
+| Part | Weight |
+|---|---|
+| Skills (share of the job's skills the candidate has) | 40 |
+| Experience | 25 |
+| Education | 10 |
+| Location | 10 |
+| Work arrangement | 10 |
+| Working hours | 5 |
+
+**Strong Match** = skills ≥ 70% **and** experience matches **and**
+location matches.
 
 ---
 
@@ -48,8 +79,8 @@ What's **not** real yet (by design — later sprints):
 
 ### 1. Prerequisites
 
-- Python 3.10+ installed
-- VS Code with the **Python** extension (ms-python.python) installed
+- Python 3.10+
+- VS Code with the **Python** extension (ms-python.python)
 
 ### 2. Open the project
 
@@ -69,10 +100,8 @@ source .venv/bin/activate
 .venv\Scripts\Activate.ps1
 ```
 
-VS Code should prompt you to select this environment as the workspace
-interpreter — click **Yes**. If it doesn't, use **Python: Select
-Interpreter** from the Command Palette (`Ctrl+Shift+P`) and pick the
-`.venv` one.
+If VS Code asks whether to use this environment, click **Yes**. Otherwise
+run **Python: Select Interpreter** (`Ctrl+Shift+P`) and pick `.venv`.
 
 ### 4. Install dependencies
 
@@ -80,13 +109,10 @@ Interpreter** from the Command Palette (`Ctrl+Shift+P`) and pick the
 pip install -r requirements.txt
 ```
 
-Re-run this after every `git pull` — teammates may have added packages
-(e.g. `google-genai` for the AI Manager). If the app fails with
-`ModuleNotFoundError`, this is the fix.
+Run this again after every `git pull` in case packages changed. If the app
+fails with `ModuleNotFoundError`, this is the fix.
 
 ### 5. Create your `.env` file
-
-Make your own copy of the settings template:
 
 ```bash
 # macOS / Linux
@@ -96,12 +122,8 @@ cp .env.example .env
 copy .env.example .env
 ```
 
-This creates a new file called `.env` in the project folder. **Don't
-copy anything into `settings.py`** — it reads `.env` automatically.
-
-The values in it work as-is for Sprint 1, so you don't need to change
-anything yet. See [Settings and secrets](#settings-and-secrets-env) to
-understand how it works.
+The defaults run the app in mock mode with sample results. To use the real
+AI, see [Mock vs live](#mock-vs-live).
 
 ### 6. Run the app
 
@@ -110,7 +132,7 @@ python manage.py migrate   # sets up Django's own internal tables only
 python manage.py runserver
 ```
 
-Open **http://127.0.0.1:8000/** in your browser.
+Open **http://127.0.0.1:8000/**.
 
 ### 7. Run the tests
 
@@ -118,147 +140,93 @@ Open **http://127.0.0.1:8000/** in your browser.
 python manage.py test matcher
 ```
 
-You should see `Ran 19 tests ... OK`.
+You should see `Ran 51 tests ... OK`. The tests never call the real AI.
+
+---
+
+## Mock vs live
+
+Two settings in `.env` control this. Restart `runserver` after changing them.
+
+| Setting | `mock` / `debug` (default) | `live` |
+|---|---|---|
+| `AI_MODE` | Fixed sample AI replies, no key needed | Real Gemini calls, needs `AI_API_KEY` |
+| `DATA_MODE` | Results pages show sample results from `dummy_data.py` | Results pages show the visitor's own saved results |
+
+For the full app, set both to `live` and add a free Gemini key from
+[Google AI Studio](https://aistudio.google.com/apikey):
+
+```bash
+AI_MODE=live
+DATA_MODE=live
+AI_API_KEY=your-key-here
+```
+
+On the free tier Gemini allows only a few requests per minute and a daily
+limit per model; check your usage at https://aistudio.google.com/usage.
+Free-tier requests may also be used by Google to improve its models, so
+avoid uploading real people's resumes you don't have permission to share.
 
 ---
 
 ## Settings and secrets (`.env`)
 
-Three files work together. You only ever edit **`.env`**.
-
 | File | What it is | In git? | Do you edit it? |
 |---|---|---|---|
-| `config/settings.py` | Defines every setting, with a safe default | ✅ Yes | ❌ No (only to add a new setting) |
-| `.env.example` | Template listing every setting you can change | ✅ Yes | ❌ No (only to add a new setting) |
+| `config/settings.py` | Every setting, with a safe default | ✅ Yes | Only to add a new setting |
+| `.env.example` | Template listing every setting | ✅ Yes | Only to add a new setting |
 | `.env` | **Your own copy** with your values and secrets | ❌ Never | ✅ Yes |
 
-### How it works
+`settings.py` loads `.env` when the app starts. A setting missing from
+`.env` falls back to its default:
 
-1. When the app starts, `settings.py` loads your `.env` file.
-2. Each setting uses the value from `.env` if it's there, or falls
-   back to its default if it isn't:
-
-   ```python
-   DATA_MODE = os.environ.get("DATA_MODE", "debug")
-   #                          from .env ↑   default ↑
-   ```
-
-3. So no `.env` file still works — you just get all the defaults.
-
-After changing `.env`, **restart `runserver`** for it to take effect.
+```python
+DATA_MODE = os.environ.get("DATA_MODE", "debug")
+#                          from .env ↑   default ↑
+```
 
 ### Available settings
 
 | Setting | Default | What it does |
 |---|---|---|
-| `DATA_MODE` | `debug` | `debug` = sample data, `live` = real data ([details](#debug-vs-live-mode)) |
-| `MAX_UPLOAD_SIZE_MB` | `10` | Largest PDF users can upload |
-| `AI_MODE` | `mock` | `mock` = fake AI replies, `live` = real AI calls (Sprint 4) |
-| `AI_API_KEY` | *(empty)* | Your free Gemini API key from [AI Studio](https://aistudio.google.com/apikey) (`GEMINI_API_KEY` also works) |
-| `AI_MODEL` | `gemini-3.8-flash` | Gemini model used by the AI Manager |
+| `AI_MODE` | `mock` | `mock` = sample AI replies, `live` = real Gemini calls |
+| `DATA_MODE` | `debug` | `debug` = sample results, `live` = the visitor's saved results |
+| `AI_API_KEY` | *(empty)* | Your Gemini API key (`GEMINI_API_KEY` also works) |
+| `AI_MODEL` | `gemini-3.8-flash` | Gemini model to use |
 | `AI_FALLBACK_MODELS` | `gemini-3.5-flash` | Backup models (comma-separated) tried if `AI_MODEL` is busy |
-| `MAX_CANDIDATES` | `10` | Most resumes an employer can compare per upload |
-| `MAX_JOBS` | `15` | Most Jobstreet jobs the AI job search returns per resume |
-| `DJANGO_DEBUG` | `True` | Shows detailed error pages — set `False` if deployed |
+| `MAX_UPLOAD_SIZE_MB` | `10` | Largest PDF users can upload |
+| `MAX_CANDIDATES` | `10` | Most resumes an employer can compare at once |
+| `MAX_JOBS` | `15` | Most jobs suggested for one resume |
+| `DJANGO_DEBUG` | `True` | Detailed error pages; set `False` if deployed |
 | `DJANGO_SECRET_KEY` | placeholder | Must be a real random value if deployed |
 | `DJANGO_ALLOWED_HOSTS` | `127.0.0.1,localhost` | Web addresses allowed to serve the app |
 
-### ⚠️ Secrets rule
-
 > **Real secrets (like `AI_API_KEY`) go in `.env` only — never in
-> `settings.py`.**
+> `settings.py`.** `settings.py` is on GitHub for anyone to read; `.env`
+> is git-ignored and never leaves your computer.
 
-`settings.py` is pushed to GitHub, so anyone can read it. It only holds
-safe placeholder defaults. `.env` is git-ignored and never leaves your
-computer. A leaked API key can be used by anyone and charged to your
-account.
-
-### Adding a new setting
-
-1. Add it to `settings.py` with a safe default:
-   `MY_SETTING = os.environ.get("MY_SETTING", "default")`
-2. Add it to `.env.example` so teammates know it exists.
-3. Tell the team to copy the new line into their own `.env`.
+To add a setting: add it to `settings.py` with a safe default, add it to
+`.env.example`, and tell the team to copy it into their `.env`.
 
 ---
 
-## Debug vs live mode
+## Where data goes
 
-One setting controls where the results pages get their data.
+Uploaded PDFs are sent to Gemini and never saved to disk. What Gemini
+returns is saved by the Data Manager as JSON in `data/`:
 
-**How to switch:** change this line in your `.env` file (not
-`settings.py`), then restart `runserver`.
-
-```bash
-DATA_MODE=debug   # or: DATA_MODE=live
-```
-
-| Mode | What the results pages show | Use it for |
+| File | Saved when | Contains |
 |---|---|---|
-| `debug` *(default)* | Fixed sample data from `matcher/dummy_data.py` | Working on the UI, demos |
-| `live` | Real saved data — **empty until Sprint 2** | Testing real uploads |
+| `data/resumes.json` | A job seeker uploads a resume | Education, experience and skills |
+| `data/job_matches.json` | Right after that | The suggested jobs for that resume |
+| `data/candidate_matches.json` | An employer uploads | The job posting details and scored candidates |
 
-- If `DATA_MODE` isn't set, the app uses `debug`.
-- The setting lives in `config/settings.py`; the switch happens in
-  `get_ranked_candidates()` / `get_ranked_jobs()` in `matcher/views.py`.
-- This is **not** Django's `DJANGO_DEBUG`. That one only controls
-  Django's error pages.
+Each visitor's session (a signed cookie) remembers which saved result is
+theirs, so the results pages only show their own results. These files hold
+people's personal details, so they are listed in `.gitignore` and should be
+kept out of git.
 
----
-
-## Where uploaded data goes
-
-> **Right now (Sprint 1), nothing is saved.** Uploads are checked, then
-> thrown away when the request ends.
-
-### What users submit
-
-| Who | Field | Python type | Example |
-|---|---|---|---|
-| Employer | `job_file` | `UploadedFile` (PDF) | `job.pdf` |
-| Employer | `candidate_files` | `list` of `UploadedFile` (PDFs) | `[c1.pdf, c2.pdf]` |
-| Job seeker | `resume_file` | `UploadedFile` (PDF) | `resume.pdf` |
-
-### Job results filters
-
-These are **not** uploaded or saved. They're picked on the job results
-page and sent in the URL (e.g. `/job-seeker/results/?locations=North`).
-Leaving a filter empty means "show all".
-
-| Filter | Python type | Example |
-|---|---|---|
-| `work_arrangement` | `list` of `str` | `["WFH", "Hybrid"]` |
-| `locations` | `list` of `str` | `["North", "Central"]` |
-| `working_hours` | `list` of `str` | `["Flexible"]` |
-| `industry` | `str` (`""` = all) | `"Technology / IT"` |
-
-All of these are checked in `matcher/managers/io_manager.py` and given
-clear names (marked `# DATA:`) in `matcher/views.py`. The filtering
-itself is done by `filter_jobs()` in `matcher/managers/logic_manager.py`.
-
-### Where it lives
-
-| Sprint | PDF files | Resume / job details |
-|---|---|---|
-| **1 (now)** | Memory only (Django uses a temp file if it's over 2.5MB), deleted after the request | Not saved |
-| **2 (planned)** | `media/uploads/` | `data/candidates.json` and `data/jobs.json` |
-
-`data/candidates.json` and `data/jobs.json` already exist with sample
-records showing the planned format (lists of JSON objects):
-
-```json
-{
-  "candidate_id": "C001",
-  "filename": "candidate_01.pdf",
-  "name": "John Tan",
-  "skills": ["Python", "Django", "SQL", "REST API"],
-  "location": "Central",
-  "work_preferences": { "wfh": true, "flexible_hours": true }
-}
-```
-
-`db.sqlite3` is **not** used for app data — only Django's own internal
-tables. It is git-ignored, as are `media/uploads/*` and `.env`.
+`db.sqlite3` is only used by Django itself, not for app data.
 
 ---
 
@@ -269,121 +237,24 @@ INF1103_Group-3_Assgn1/
 ├── manage.py
 ├── requirements.txt
 ├── .env.example
-├── .gitignore
-├── config/                    # Django project settings/urls/wsgi
-├── data/                      # Sample CSV/JSON (wired up in Sprint 2)
-├── media/uploads/             # Uploaded files land here in later sprints
+├── config/                         # Django settings, urls, wsgi
+├── data/                           # Saved results (JSON)
 └── matcher/
-    ├── views.py                # Thin views: validate input, render templates
+    ├── views.py                    # Pages: handle the request, show messages
     ├── urls.py
-    ├── models.py                 # Empty — no ORM models (see file for why)
-    ├── dummy_data.py              # Sprint 1 stand-in for real records
-    ├── context_processors.py      # Adds ?v= to CSS/JS links so browsers don't use old cached files
+    ├── dummy_data.py               # Sample results for DATA_MODE=debug
+    ├── context_processors.py       # Adds ?v= to CSS/JS links so browsers load new versions
+    ├── models.py                   # Empty: no database models
     ├── tests.py
-    ├── managers/                  # See each file for its sprint
-    │   ├── io_manager.py          # Upload + filter forms and validation
-    │   ├── data_manager.py
-    │   ├── logic_manager.py       # Job filtering (scoring/ranking: Sprint 3)
-    │   └── ai_manager.py
-    ├── services/                  # Sprint 2-4 placeholders
-    │   ├── pdf_service.py
-    │   ├── ocr_service.py
-    │   └── matching_service.py
-    ├── templates/matcher/
-    │   ├── base.html
-    │   ├── landing.html
-    │   ├── employer.html
-    │   ├── job_seeker.html
-    │   ├── employer_results.html
-    │   └── job_results.html
+    ├── managers/
+    │   ├── io_manager.py           # Forms and upload checks
+    │   ├── ai_manager.py           # Google Gemini calls
+    │   ├── data_manager.py         # JSON save/load
+    │   └── logic_manager.py        # Scoring, ranking, filtering
+    ├── services/
+    │   └── matching_service.py     # The three AI flows
+    ├── templates/matcher/          # landing, employer, job_seeker and the two results pages
     └── static/
         ├── css/style.css
-        └── js/main.js
+        └── js/main.js              # Drag-and-drop uploads, loading spinner
 ```
-
-## Architecture notes carried through all sprints
-
-- **I/O Manager** — handles all user input and output: the upload and
-  filter forms, file validation, and (later) formatting results and
-  user-facing error messages. The only place `print()`/terminal I/O is
-  allowed.
-- **AI Manager** — zero business logic. Prompt building, API calls,
-  schema validation, retries only.
-- **Logic Manager** — the domain brain. Filtering, scoring, the
-  multi-condition match rule, ranking. Never talks to the AI API or the filesystem
-  directly.
-- **Data Manager** — the only place that reads/writes `data/*.json`
-  (or `.csv`). Handles missing/corrupt files without crashing.
-
-The I/O Manager (forms and validation) and the Logic Manager's
-`filter_jobs()` are already in use. The rest are placeholders with a
-docstring and TODOs for their sprint — see `matcher/managers/`.
-
----
-
-## Sprint roadmap
-
-### Sprint 2 — Database
-
-Goal: replace `matcher/dummy_data.py` with real, persistent records.
-
-- Implement `matcher/managers/data_manager.py`:
-  `save_record()`, `load_records()`, `filter_records()`
-- Read/write CSV or JSON under `data/` (`candidates.json`, `jobs.json`
-  already seeded with sample records)
-- Wire employer/job-seeker uploads to actually save what's submitted,
-  and have results pages load from disk instead of hardcoded data
-- Handle missing files, empty files, invalid JSON, and malformed CSV
-  without crashing — log and continue
-- Tests: save/load round-trip, corrupt-file handling, missing-file
-  handling, duplicate records
-
-### Sprint 3 — Logic
-
-Goal: turn stored records into scored, ranked results.
-
-- Implement `matcher/managers/logic_manager.py`:
-  scoring weights (Skills 40% / Experience 25% / Education 10% /
-  Location 10% / Work Arrangement 10% / Working Hours 5%, configurable)
-- At least one multi-condition business rule (e.g. skills ≥ 70% AND
-  experience match AND location match → "Strong Match")
-- Ranking is produced here, not by the AI — Logic Manager is the only
-  thing that decides final score and order
-- Since the AI Manager doesn't exist yet, Logic Manager will consume
-  rule-based "AI-shaped" fields as a stand-in until Sprint 4
-- Tests: scoring calculation, the multi-condition rule, candidate
-  ranking, job ranking
-
-### Sprint 4 — AI
-
-Goal: replace the rule-based stand-in with a real (or mocked) AI
-Manager.
-
-- Implement `matcher/managers/ai_manager.py`: prompt construction →
-  AI API call → parse JSON → validate schema → retry on malformed
-  response → return structured output to the Logic Manager
-- Ships with `AI_MODE=mock` by default (see `.env.example`) so the
-  whole app works with zero API key — deterministic, demo-friendly output
-- `AI_MODE=live` path added behind the same interface once a provider
-  is chosen; zero business logic lives in this module either way
-- Errors (timeout, API failure, malformed JSON) are logged and never
-  crash the request — one bad response shouldn't take down the batch
-- Tests: schema validation, retry-on-malformed-response, mocked API
-  calls (no real network calls in the test suite)
-
-### Docker — last
-
-Goal: containerize the finished app, once Sprints 1–4 all work
-together.
-
-- `Dockerfile` for the Django app (built on the final `requirements.txt`)
-- `docker-compose.yml` if a separate service (e.g. a real database) is
-  introduced later; not needed while storage stays CSV/JSON
-- `.dockerignore` (`.venv/`, `.env`, `db.sqlite3`, `media/uploads/*`, etc.)
-- Verify `docker build` + `docker run` serve the app the same as
-  `runserver` does locally
-
-Keeping `requirements.txt` accurate as each sprint adds dependencies
-(e.g. a PDF-parsing library in Sprint 2, an AI SDK in Sprint 4) means
-this step should need no dependency archaeology when it's time to
-write the Dockerfile.
