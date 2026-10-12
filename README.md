@@ -146,7 +146,7 @@ Open **http://127.0.0.1:8000/**.
 python run_tests.py
 ```
 
-You should see `Ran 49 tests ... OK`. Every test is a plain function in
+You should see `Ran 53 tests ... OK`. Every test is a plain function in
 `matcher/tests.py`; none of them call the real AI or touch `data/`.
 
 ---
