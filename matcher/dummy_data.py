@@ -1,8 +1,6 @@
 """
-Sample data for Sprint 1, so the results pages have something to show.
-
-Sprint 2: real records will be loaded by the Data Manager instead.
-Sprint 3/4: scores and match results will come from the Logic + AI Managers.
+Sample results shown when DATA_MODE=debug, so the pages can be tried
+without uploading anything or calling the AI.
 """
 
 from dataclasses import dataclass, field
@@ -10,32 +8,14 @@ from typing import List
 
 
 @dataclass
-class WorkPreferences:
-    """DATA: a candidate's work preferences."""
-
-    wfh: bool = False
-    hybrid: bool = False
-    on_site: bool = False
-    flexible_hours: bool = False
-
-
-@dataclass
 class Candidate:
-    """DATA: one candidate's resume details."""
+    """A sample candidate on the employer results page."""
 
-    # --- DATA: read from the resume (Sprint 2) ---
-    candidate_id: str
-    filename: str
     name: str
-    skills: List[str]
     experience: List[str]
-    education: List[str]
     location: str
-    work_preferences: WorkPreferences
-
-    # --- DATA: match results, filled in by the AI + Logic Managers (Sprint 3/4) ---
-    match_score: int = 0
-    matched_skills: List[str] = field(default_factory=list)
+    match_score: int
+    matched_skills: List[str]
     missing_skills: List[str] = field(default_factory=list)
     experience_match: bool = False
     location_match: bool = False
@@ -46,23 +26,17 @@ class Candidate:
 
 @dataclass
 class Job:
-    """DATA: one job posting's details."""
+    """A sample job on the job seeker results page."""
 
-    # --- DATA: read from the job description (Sprint 2) ---
-    job_id: str
     title: str
     company: str
-    required_skills: List[str]
     location: str
     work_arrangement: str  # "WFH" | "Hybrid" | "On-site" | "Flexible"
     working_hours: str  # "Standard" | "Flexible" | "Shift-based"
-    industry: str  # e.g. "Technology / IT" (see INDUSTRY_CHOICES in io_manager.py)
-
-    # --- DATA: match results, filled in by the AI + Logic Managers (Sprint 3/4) ---
-    match_score: int = 0
-    matched_skills: List[str] = field(default_factory=list)
+    industry: str  # one of INDUSTRY_CHOICES in io_manager.py
+    match_score: int
+    matched_skills: List[str]
     missing_skills: List[str] = field(default_factory=list)
-    experience_match: bool = False
     location_match: bool = False
     work_arrangement_match: bool = False
     working_hours_match: bool = False
@@ -72,18 +46,11 @@ class Job:
 
 def sample_ranked_candidates() -> List[Candidate]:
     """Sample ranked candidates for the employer results page."""
-
-    # DATA: list of sample candidates
-    candidates = [
+    return [
         Candidate(
-            candidate_id="C001",
-            filename="candidate_01.pdf",
             name="John Tan",
-            skills=["Python", "Django", "SQL", "REST API"],
             experience=["Software Developer, 3 years"],
-            education=["B.Sc. Computer Science"],
             location="Central",
-            work_preferences=WorkPreferences(wfh=True, flexible_hours=True),
             match_score=92,
             matched_skills=["Python", "Django", "SQL", "REST API"],
             missing_skills=["Docker"],
@@ -94,14 +61,9 @@ def sample_ranked_candidates() -> List[Candidate]:
             rank=1,
         ),
         Candidate(
-            candidate_id="C002",
-            filename="candidate_02.pdf",
             name="Priya Sundaram",
-            skills=["Python", "Flask", "PostgreSQL", "Docker"],
             experience=["Backend Engineer, 2 years"],
-            education=["B.Eng. Information Systems"],
             location="North",
-            work_preferences=WorkPreferences(hybrid=True),
             match_score=78,
             matched_skills=["Python", "PostgreSQL", "Docker"],
             missing_skills=["Django", "REST API"],
@@ -112,14 +74,9 @@ def sample_ranked_candidates() -> List[Candidate]:
             rank=2,
         ),
         Candidate(
-            candidate_id="C003",
-            filename="candidate_03.pdf",
             name="Marcus Lim",
-            skills=["Java", "Spring Boot", "MySQL"],
             experience=["Junior Developer, 1 year"],
-            education=["Diploma in IT"],
             location="Central",
-            work_preferences=WorkPreferences(on_site=True),
             match_score=41,
             matched_skills=["MySQL"],
             missing_skills=["Python", "Django", "REST API"],
@@ -130,19 +87,14 @@ def sample_ranked_candidates() -> List[Candidate]:
             rank=3,
         ),
     ]
-    return candidates
 
 
 def sample_ranked_jobs() -> List[Job]:
     """Sample ranked jobs for the job seeker results page."""
-
-    # DATA: list of sample jobs
-    jobs = [
+    return [
         Job(
-            job_id="J001",
             title="Software Developer",
             company="Brightleaf Systems",
-            required_skills=["Python", "Django", "SQL"],
             location="Central",
             work_arrangement="WFH",
             working_hours="Flexible",
@@ -150,7 +102,6 @@ def sample_ranked_jobs() -> List[Job]:
             match_score=91,
             matched_skills=["Python", "Django", "SQL"],
             missing_skills=[],
-            experience_match=True,
             location_match=True,
             work_arrangement_match=True,
             working_hours_match=True,
@@ -158,10 +109,8 @@ def sample_ranked_jobs() -> List[Job]:
             rank=1,
         ),
         Job(
-            job_id="J002",
             title="Backend Engineer",
             company="Harborview Digital",
-            required_skills=["Python", "PostgreSQL", "Docker", "AWS"],
             location="East",
             work_arrangement="Hybrid",
             working_hours="Standard",
@@ -169,7 +118,6 @@ def sample_ranked_jobs() -> List[Job]:
             match_score=68,
             matched_skills=["Python", "Docker"],
             missing_skills=["PostgreSQL", "AWS"],
-            experience_match=True,
             location_match=False,
             work_arrangement_match=True,
             working_hours_match=False,
@@ -177,10 +125,8 @@ def sample_ranked_jobs() -> List[Job]:
             rank=2,
         ),
         Job(
-            job_id="J003",
             title="Data Analyst",
             company="Quill & Compass",
-            required_skills=["SQL", "Excel", "Tableau"],
             location="West",
             work_arrangement="On-site",
             working_hours="Shift-based",
@@ -188,7 +134,6 @@ def sample_ranked_jobs() -> List[Job]:
             match_score=35,
             matched_skills=["SQL"],
             missing_skills=["Excel", "Tableau"],
-            experience_match=False,
             location_match=False,
             work_arrangement_match=False,
             working_hours_match=False,
@@ -196,4 +141,3 @@ def sample_ranked_jobs() -> List[Job]:
             rank=3,
         ),
     ]
-    return jobs

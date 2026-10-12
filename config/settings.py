@@ -63,8 +63,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-# Only used by Django itself (sessions etc.). Our app data is saved as
-# CSV/JSON files in data/ by the Data Manager (Sprint 2).
+# Only used by Django itself. App data is saved as JSON files in data/.
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
@@ -72,8 +71,8 @@ DATABASES = {
     }
 }
 
-# Keep sessions in a signed cookie so no database tables (migrations) are needed.
-# The session only holds small values, e.g. which job match the visitor uploaded.
+# Sessions live in a signed cookie, so no database tables are needed. They
+# only hold which saved result belongs to the visitor.
 SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
 
 LANGUAGE_CODE = "en-us"
@@ -90,26 +89,23 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- Application-specific settings ------------------------------------------
 
-# Data mode toggle - set DATA_MODE in .env
-#   "debug" = results pages use the fixed sample data in dummy_data.py
-#   "live"  = results pages use real saved data (Sprint 2 onwards)
+# "debug" = results pages show the sample data in dummy_data.py
+# "live"  = results pages show the visitor's own saved results
 DATA_MODE = os.environ.get("DATA_MODE", "debug")
 
-# Folder where the Data Manager saves CSV/JSON files (Sprint 2)
+# Folder where the Data Manager saves its JSON files
 DATA_DIR = BASE_DIR / "data"
 
 # Upload limits, checked by the I/O Manager
 MAX_UPLOAD_SIZE_MB = int(os.environ.get("MAX_UPLOAD_SIZE_MB", "10"))
-
-# Most resumes an employer can compare in one upload (all sent in one AI request)
+# Most resumes an employer can compare at once (all go to the AI in one request)
 MAX_CANDIDATES = int(os.environ.get("MAX_CANDIDATES", "10"))
-
-# Most Jobstreet jobs the AI job search returns for one resume
+# Most jobs suggested for one resume
 MAX_JOBS = int(os.environ.get("MAX_JOBS", "15"))
 
-# AI Manager settings (Sprint 4)
-AI_MODE = os.environ.get("AI_MODE", "mock")  # "mock" or "live"
-# Free Gemini key from https://aistudio.google.com/apikey. GEMINI_API_KEY also works.
+# AI Manager: "mock" = fixed replies, no key needed; "live" = Google Gemini
+AI_MODE = os.environ.get("AI_MODE", "mock")
+# Free Gemini key from https://aistudio.google.com/apikey (GEMINI_API_KEY also works)
 AI_API_KEY = os.environ.get("AI_API_KEY") or os.environ.get("GEMINI_API_KEY", "")
 AI_MODEL = os.environ.get("AI_MODEL", "gemini-3.8-flash")
 # Models to try, in order, if AI_MODEL is overloaded (503) or rate limited (429)
