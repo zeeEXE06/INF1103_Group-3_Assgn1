@@ -6,8 +6,7 @@ It never raises: if the AI fails or keeps replying in the wrong format, the
 error is logged and None is returned.
 
 Settings (in .env):
-    AI_MODE            "mock" (default, fixed replies, no key needed) or "live"
-    AI_API_KEY         free Gemini key from https://aistudio.google.com/apikey
+    AI_API_KEY         free Gemini key from https://aistudio.google.com/apikey (required)
     AI_MODEL           Gemini model to use
     AI_FALLBACK_MODELS models to try, in order, if AI_MODEL is busy
 
@@ -177,11 +176,7 @@ Return ONLY valid JSON in this format:
 def extract_resume(resume_file):
     """Read a resume PDF. Returns {"education", "experience", "skills"} or None."""
     logger.info("AI Manager reading %s (%s bytes)", resume_file.name, resume_file.size)
-    return request_json(
-        lambda: [pdf_part(resume_file), RESUME_PROMPT],
-        resume_schema_problem,
-        MOCK_RESUME_REPLY,
-    )
+    return request_json(lambda: [pdf_part(resume_file), RESUME_PROMPT], resume_schema_problem)
 
 
 def suggest_jobs(resume, max_jobs, options):
@@ -197,7 +192,7 @@ def suggest_jobs(resume, max_jobs, options):
         max_jobs=max_jobs,
         **options,
     )
-    return request_json(lambda: prompt, jobs_schema_problem, MOCK_JOBS_REPLY)
+    return request_json(lambda: prompt, jobs_schema_problem)
 
 
 def compare_candidates(job_file, candidate_files, options):
@@ -214,27 +209,24 @@ def compare_candidates(job_file, candidate_files, options):
             parts += [f"RESUME {number} ({resume_file.name}):", pdf_part(resume_file)]
         return parts
 
-    return request_json(contents, comparison_schema_problem, mock_comparison_reply(len(candidate_files)))
+    return request_json(contents, comparison_schema_problem)
 
 
 # ---------- Asking Gemini ----------
 
-def request_json(build_contents, schema_problem, mock_reply):
+def request_json(build_contents, schema_problem):
     """Ask the AI and return its reply as a dict, or None if it fails.
 
     A reply that is not JSON, or doesn't match the expected structure, is
     rejected and asked for again (up to REPLY_ATTEMPTS times).
     """
     for attempt in range(1, REPLY_ATTEMPTS + 1):
-        if settings.AI_MODE != "live":
-            reply = mock_reply
-        else:
-            try:
-                reply = generate(build_contents(), json_config())
-            except Exception:
-                # Bad/missing API key, network down, every model busy, etc.
-                logger.exception("AI request failed")
-                return None
+        try:
+            reply = generate(build_contents(), json_config())
+        except Exception:
+            # Bad/missing API key, network down, every model busy, etc.
+            logger.exception("AI request failed")
+            return None
 
         data = parse_json_reply(reply)
         problem = "not valid JSON" if data is None else schema_problem(data)
@@ -250,7 +242,7 @@ def get_client():
     from google.genai import types
 
     if not settings.AI_API_KEY:
-        raise RuntimeError("AI_MODE is 'live' but AI_API_KEY is not set in .env")
+        raise RuntimeError("AI_API_KEY is not set in .env")
     return genai.Client(
         api_key=settings.AI_API_KEY,
         http_options=types.HttpOptions(
@@ -371,80 +363,3 @@ def comparison_schema_problem(data):
         if not isinstance(number, int) or isinstance(number, bool):
             return 'every candidate needs a whole-number "resume_number"'
     return None
-
-
-# ---------- Mock replies (AI_MODE=mock) ----------
-
-MOCK_RESUME_REPLY = json.dumps({
-    "education": [{
-        "qualification": "B.Sc.",
-        "institution": "Sample University",
-        "field_of_study": "Computer Science",
-        "start_date": "2020",
-        "end_date": "2024",
-    }],
-    "experience": [{
-        "job_title": "Software Developer Intern",
-        "company": "Sample Company",
-        "start_date": "2023",
-        "end_date": "2023",
-    }],
-    "skills": [{"skill": "Python"}, {"skill": "Django"}],
-})
-
-MOCK_JOBS_REPLY = json.dumps({
-    "jobs": [{
-        "title": "Junior Python Developer",
-        "match_score": 82,
-        "location": "Central",
-        "work_arrangement": "Hybrid",
-        "working_hours": "Standard",
-        "industry": "Technology / IT",
-        "matched_skills": ["Python", "Django"],
-        "match_reason": "Uses the candidate's Python and Django skills.",
-    }],
-})
-
-
-def mock_comparison_reply(resume_count):
-    """Mock employer comparison: one candidate per resume."""
-    return json.dumps({
-        "job": {
-            "title": "Junior Python Developer",
-            "company": "Sample Tech Pte Ltd",
-            "required_skills": ["Python", "Django", "SQL"],
-            "location": "Central",
-            "work_arrangement": "Hybrid",
-            "working_hours": "Standard",
-            "industry": "Technology / IT",
-        },
-        "candidates": [mock_candidate(number) for number in range(1, resume_count + 1)],
-    })
-
-
-def mock_candidate(number):
-    """Resume 1 is a strong match, resume 2 a partial match, the rest weak."""
-    strong, partial = number == 1, number == 2
-    if strong:
-        matched, missing = ["Python", "Django", "SQL"], []
-    elif partial:
-        matched, missing = ["Python", "Django"], ["SQL"]
-    else:
-        matched, missing = ["Python"], ["Django", "SQL"]
-    return {
-        "resume_number": number,
-        "name": f"Sample Candidate {number}",
-        "matched_skills": matched,
-        "missing_skills": missing,
-        "experience": ["Software Developer, 3 years" if strong else "Intern, 6 months"],
-        "education": ["B.Sc. Computer Science"],
-        "location": "Central" if strong or partial else "West",
-        "work_arrangement": "Hybrid",
-        "working_hours": "Standard",
-        "experience_match": strong,
-        "education_match": True,
-        "location_match": strong or partial,
-        "work_arrangement_match": True,
-        "working_hours_match": strong,
-        "summary": f"Sample summary for candidate {number}.",
-    }

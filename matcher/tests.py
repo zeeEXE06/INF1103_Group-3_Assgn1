@@ -3,11 +3,13 @@ Tests for the Resume & Job Matcher. Run them with:
 
     python run_tests.py
 
-Every test is a plain function. No test calls the real AI, and run_tests.py
-gives each test its own empty data folder.
+Every test is a plain function. No test calls the real AI: fake_gemini()
+replaces Gemini with fixed replies, which still go through the AI Manager's
+checks. run_tests.py gives each test its own empty data folder.
 """
 
 import io
+import json
 from unittest.mock import MagicMock, patch
 
 from django.conf import settings
@@ -37,6 +39,58 @@ from .managers.logic_manager import (
     to_score,
 )
 from .services.matching_service import match_candidates_to_job, match_jobs_to_resume
+
+
+# ---------- Fake Gemini replies ----------
+
+RESUME_REPLY = json.dumps({
+    "education": [{"qualification": "B.Sc.", "institution": "Sample University",
+                   "field_of_study": "Computer Science", "start_date": "2020", "end_date": "2024"}],
+    "experience": [{"job_title": "Software Developer Intern", "company": "Sample Company",
+                    "start_date": "2023", "end_date": "2023"}],
+    "skills": [{"skill": "Python"}, {"skill": "Django"}],
+})
+
+JOBS_REPLY = json.dumps({"jobs": [
+    {"title": "Software Developer", "match_score": 91, "location": "Central", "work_arrangement": "WFH",
+     "working_hours": "Flexible", "industry": "Technology / IT", "matched_skills": ["Python", "Django"],
+     "match_reason": "Uses the candidate's Python and Django skills."},
+    {"title": "Backend Engineer", "match_score": 68, "location": "East", "work_arrangement": "Hybrid",
+     "working_hours": "Standard", "industry": "Technology / IT", "matched_skills": ["Python"],
+     "match_reason": "Good backend overlap."},
+    {"title": "Data Analyst", "match_score": 35, "location": "West", "work_arrangement": "On-site",
+     "working_hours": "Shift-based", "industry": "Finance / Banking", "matched_skills": [],
+     "match_reason": "Limited overlap."},
+]})
+
+
+def comparison_reply(resume_count):
+    """Resume 1 is a strong match, resume 2 a partial match, the rest weak."""
+    candidates = []
+    for number in range(1, resume_count + 1):
+        strong, partial = number == 1, number == 2
+        matched = ["Python", "Django", "SQL"] if strong else ["Python", "Django"] if partial else ["Python"]
+        candidates.append({
+            "resume_number": number,
+            "name": f"Candidate {number}",
+            "matched_skills": matched,
+            "missing_skills": [skill for skill in ["Python", "Django", "SQL"] if skill not in matched],
+            "experience_match": strong,
+            "education_match": True,
+            "location_match": strong or partial,
+            "work_arrangement_match": True,
+            "working_hours_match": strong,
+            "summary": f"Summary for candidate {number}.",
+        })
+    return json.dumps({
+        "job": {"title": "Junior Python Developer", "company": "Sample Tech", "required_skills": ["Python", "Django", "SQL"]},
+        "candidates": candidates,
+    })
+
+
+def fake_gemini(*replies):
+    """Replace the Gemini call with these replies, in order."""
+    return patch("matcher.managers.ai_manager.generate", side_effect=list(replies))
 
 
 # ---------- Helpers ----------
@@ -122,24 +176,23 @@ def test_employer_rejects_too_many_resumes():
     assert "at most 2 resumes" in text(response)
 
 
-@override_settings(AI_MODE="mock")
 def test_employer_upload_redirects_to_results():
-    response = upload_employer_files(Client(), ["c1.pdf", "c2.pdf"])
+    with fake_gemini(comparison_reply(2)):
+        response = upload_employer_files(Client(), ["c1.pdf", "c2.pdf"])
     assert response.status_code == 302
     assert response.url == reverse("matcher:employer_results")
 
 
-@override_settings(AI_MODE="mock", DATA_MODE="live")
 def test_employer_results_are_ranked_with_strong_match():
     # Uploaded weakest first - the page must still rank the strong match first
-    page = text(upload_employer_files(Client(), ["c3.pdf", "c2.pdf", "c1.pdf"], follow=True))
+    with fake_gemini(comparison_reply(3)):
+        page = text(upload_employer_files(Client(), ["c3.pdf", "c2.pdf", "c1.pdf"], follow=True))
     assert "Junior Python Developer" in page  # job posting summary
     assert page.count("Strong Match") == 1
-    # Mock: resume 1 (c3.pdf) is the strong match, so it is ranked first
+    # Resume 1 (c3.pdf) is the strong match, so it is ranked first
     assert page.index("c3.pdf") < page.index("c2.pdf") < page.index("c1.pdf")
 
 
-@override_settings(DATA_MODE="live")
 def test_employer_ai_failure_shows_error_and_stays_on_page():
     with patch("matcher.views.match_candidates_to_job", side_effect=ValueError("AI failed")):
         response = upload_employer_files(Client(), ["c1.pdf"])
@@ -147,13 +200,6 @@ def test_employer_ai_failure_shows_error_and_stays_on_page():
     assert "The AI could not process your upload" in text(response)
 
 
-@override_settings(DATA_MODE="debug")
-def test_employer_results_debug_mode_shows_sample_data():
-    page = text(Client().get(reverse("matcher:employer_results")))
-    assert "#1" in page and "John Tan" in page
-
-
-@override_settings(DATA_MODE="live")
 def test_results_pages_are_empty_before_any_upload():
     client = Client()
     assert "No candidates yet" in text(client.get(reverse("matcher:employer_results")))
@@ -186,9 +232,9 @@ def test_job_seeker_requires_a_resume():
     assert "Upload your resume" in text(response)
 
 
-@override_settings(AI_MODE="mock")
 def test_job_seeker_upload_redirects_and_saves_resume():
-    response = upload_resume(Client())
+    with fake_gemini(RESUME_REPLY, JOBS_REPLY):
+        response = upload_resume(Client())
     assert response.status_code == 302
     assert response.url == reverse("matcher:job_results")
     records = load_records("resumes")
@@ -205,20 +251,21 @@ def test_job_seeker_ai_failure_shows_error_and_saves_nothing():
     assert load_records("resumes") == []
 
 
-@override_settings(AI_MODE="mock")
 def test_failed_job_search_still_saves_resume():
-    with patch("matcher.views.match_jobs_to_resume", side_effect=ValueError("AI failed")):
+    with fake_gemini(RESUME_REPLY), \
+            patch("matcher.views.match_jobs_to_resume", side_effect=ValueError("AI failed")):
         response = upload_resume(Client(), follow=True)
     assert "the job search failed" in text(response)
     assert len(load_records("resumes")) == 1
 
 
-@override_settings(AI_MODE="mock", MAX_JOBS=2)
+@override_settings(MAX_JOBS=2)
 def test_suggested_jobs_are_saved_for_the_resume():
     resume = save_resume()
-    record = match_jobs_to_resume()
+    with fake_gemini(JOBS_REPLY):
+        record = match_jobs_to_resume()
     assert record["resume_id"] == resume["id"]
-    assert len(record["jobs"]) == 1
+    assert len(record["jobs"]) == 2
     assert load_records("job_matches") == [record]
 
 
@@ -257,90 +304,86 @@ def test_job_search_without_a_saved_resume_raises():
     assert raises(ValueError, match_jobs_to_resume)
 
 
-@override_settings(AI_MODE="mock", DATA_MODE="live")
+def uploaded_client():
+    """A visitor who has uploaded a resume and got the three JOBS_REPLY jobs."""
+    client = Client()
+    with fake_gemini(RESUME_REPLY, JOBS_REPLY):
+        upload_resume(client)
+    return client
+
+
+def job_results(client, filters=None):
+    return text(client.get(reverse("matcher:job_results"), filters or {}))
+
+
 def test_job_results_show_suggested_jobs_with_links():
-    page = text(upload_resume(Client(), follow=True))
-    assert "Junior Python Developer" in page
-    assert 'href="https://sg.jobstreet.com/junior-python-developer-jobs"' in page
-    assert "View jobs on Jobstreet" in page and "82%" in page and "Apply filters" in page
+    with fake_gemini(RESUME_REPLY, JOBS_REPLY):
+        page = text(upload_resume(Client(), follow=True))
+    assert "Software Developer" in page
+    assert 'href="https://sg.jobstreet.com/software-developer-jobs"' in page
+    assert "View jobs on Jobstreet" in page and "91%" in page and "Apply filters" in page
 
 
-@override_settings(AI_MODE="mock", DATA_MODE="live")
-def test_filters_apply_to_suggested_jobs():
-    client = Client()
-    upload_resume(client)
-    url = reverse("matcher:job_results")
-    assert "Junior Python Developer" in text(client.get(url, {"work_arrangement": ["Hybrid"], "locations": ["Central"]}))
-    page = text(client.get(url, {"locations": ["North"]}))
-    assert "Junior Python Developer" not in page
-    assert "No jobs match these filters" in page
-
-
-@override_settings(AI_MODE="mock", DATA_MODE="live")
-def test_changing_filters_does_not_call_the_ai():
-    client = Client()
-    upload_resume(client)
-    with patch("matcher.services.matching_service.suggest_jobs") as ai_text, \
-            patch("matcher.services.matching_service.extract_resume") as ai_pdf:
-        client.get(reverse("matcher:job_results"), {"locations": ["Central"]})
-        client.get(reverse("matcher:job_results"), {"industry": "Technology / IT"})
-    ai_text.assert_not_called()
-    ai_pdf.assert_not_called()
-
-
-@override_settings(AI_MODE="mock", DATA_MODE="live")
 def test_other_visitors_do_not_see_your_jobs():
-    upload_resume(Client())
-    page = text(Client().get(reverse("matcher:job_results")))
-    assert "Junior Python Developer" not in page
+    uploaded_client()
+    page = job_results(Client())
+    assert "Software Developer" not in page
     assert "No matches yet" in page
 
 
-# ---------- Job filters (sample data) ----------
-# Sample jobs: Software Developer (Central, WFH, Flexible, Technology / IT),
+@override_settings(AI_API_KEY="")
+def test_without_the_ai_the_user_cannot_get_results():
+    client = Client()
+    page = text(upload_resume(client, follow=True))
+    assert "The AI could not process your upload" in page
+    assert load_records("resumes") == []
+    assert "No matches yet" in job_results(client)
+
+
+# ---------- Job filters ----------
+# JOBS_REPLY: Software Developer (Central, WFH, Flexible, Technology / IT),
 # Backend Engineer (East, Hybrid, Standard, Technology / IT),
 # Data Analyst (West, On-site, Shift-based, Finance / Banking)
 
-def sample_job_results(filters):
-    return text(Client().get(reverse("matcher:job_results"), filters))
-
-
-@override_settings(DATA_MODE="debug")
 def test_no_filters_shows_all_jobs():
-    assert "Showing 3 of 3 jobs" in sample_job_results({})
+    assert "Showing 3 of 3 jobs" in job_results(uploaded_client())
 
 
-@override_settings(DATA_MODE="debug")
 def test_filter_by_location():
-    page = sample_job_results({"locations": ["Central", "East"]})
+    page = job_results(uploaded_client(), {"locations": ["Central", "East"]})
     assert "Software Developer" in page and "Backend Engineer" in page
     assert "Data Analyst" not in page
 
 
-@override_settings(DATA_MODE="debug")
 def test_filters_combine():
-    page = sample_job_results({"work_arrangement": ["Hybrid"], "industry": "Technology / IT"})
+    page = job_results(uploaded_client(), {"work_arrangement": ["Hybrid"], "industry": "Technology / IT"})
     assert "Showing 1 of 3 jobs" in page and "Backend Engineer" in page
 
 
-@override_settings(DATA_MODE="debug")
 def test_no_jobs_match_shows_message():
-    assert "No jobs match these filters" in sample_job_results({"locations": ["North"]})
+    assert "No jobs match these filters" in job_results(uploaded_client(), {"locations": ["North"]})
 
 
-@override_settings(DATA_MODE="debug")
 def test_unknown_filter_value_shows_all_jobs():
-    assert "Showing 3 of 3 jobs" in sample_job_results({"locations": ["Mars"]})
+    assert "Showing 3 of 3 jobs" in job_results(uploaded_client(), {"locations": ["Mars"]})
+
+
+def test_changing_filters_does_not_call_the_ai():
+    client = uploaded_client()
+    with patch("matcher.managers.ai_manager.generate") as gemini:
+        job_results(client, {"locations": ["Central"]})
+        job_results(client, {"industry": "Technology / IT"})
+    gemini.assert_not_called()
 
 
 # ---------- AI Manager ----------
 
-@override_settings(AI_MODE="mock")
-def test_mock_mode_works_without_api_key():
-    assert set(extract_resume(make_pdf_file())) == {"education", "experience", "skills"}
+def test_ai_replies_pass_the_schema_checks():
+    with fake_gemini(RESUME_REPLY):
+        assert set(extract_resume(make_pdf_file())) == {"education", "experience", "skills"}
 
 
-@override_settings(AI_MODE="live", AI_API_KEY="test", AI_MODEL="main", AI_FALLBACK_MODELS=["backup"])
+@override_settings(AI_API_KEY="test", AI_MODEL="main", AI_FALLBACK_MODELS=["backup"])
 def test_busy_model_falls_back_to_next_model():
     busy = errors.ServerError(503, {"error": {"code": 503, "message": "high demand"}})
     client = MagicMock()
@@ -350,7 +393,7 @@ def test_busy_model_falls_back_to_next_model():
     assert [c.kwargs["model"] for c in client.models.generate_content.call_args_list] == ["main", "backup"]
 
 
-@override_settings(AI_MODE="live", AI_API_KEY="test", AI_MODEL="main", AI_FALLBACK_MODELS=["backup"])
+@override_settings(AI_API_KEY="test", AI_MODEL="main", AI_FALLBACK_MODELS=["backup"])
 def test_bad_key_error_does_not_fall_back():
     client = MagicMock()
     client.models.generate_content.side_effect = errors.ClientError(
@@ -361,28 +404,28 @@ def test_bad_key_error_does_not_fall_back():
     assert client.models.generate_content.call_count == 1
 
 
-@override_settings(AI_MODE="live", AI_API_KEY="test")
+@override_settings(AI_API_KEY="test")
 def test_broken_or_wrong_shape_reply_is_asked_again():
     good = '{"jobs": [{"title": "Dev"}]}'
     for bad in ('{"broken', '{"jobs": "none"}'):
         with patch("matcher.managers.ai_manager.generate", side_effect=[bad, good]) as gen:
-            assert request_json(lambda: "hi", jobs_schema_problem, "") == {"jobs": [{"title": "Dev"}]}
+            assert request_json(lambda: "hi", jobs_schema_problem) == {"jobs": [{"title": "Dev"}]}
         assert gen.call_count == 2
 
 
-@override_settings(AI_MODE="live", AI_API_KEY="test")
+@override_settings(AI_API_KEY="test")
 def test_gives_up_after_repeated_wrong_shape():
     with patch("matcher.managers.ai_manager.generate", return_value='{"jobs": "none"}') as gen:
-        assert request_json(lambda: "hi", jobs_schema_problem, "") is None
+        assert request_json(lambda: "hi", jobs_schema_problem) is None
     assert gen.call_count == 2
 
 
-@override_settings(AI_MODE="live", AI_API_KEY="")
+@override_settings(AI_API_KEY="")
 def test_api_failure_returns_none_instead_of_crashing():
     assert extract_resume(make_pdf_file()) is None
 
 
-@override_settings(AI_MODE="live", AI_API_KEY="")
+@override_settings(AI_API_KEY="")
 def test_missing_api_key_gives_clear_error():
     assert raises(RuntimeError, get_client)
 

@@ -48,7 +48,7 @@
                     {{ candidate.name }}
                     {% if candidate.strong_match %}<span class="badge badge--strong">Strong Match</span>{% endif %}
                 </h2>
-                {% if job %}<p class="result-card__company">{{ candidate.filename }}</p>{% endif %}
+                <p class="result-card__company">{{ candidate.filename }}</p>
                 <p class="result-card__summary">{{ candidate.summary }}</p>
 
                 <div class="result-grid">
@@ -73,14 +73,12 @@
                             <li class="check-list__item {% if candidate.work_arrangement_match %}check-list__item--yes{% else %}check-list__item--no{% endif %}">
                                 Work arrangement compatible
                             </li>
-                            {% if job %}
                             <li class="check-list__item {% if candidate.education_match %}check-list__item--yes{% else %}check-list__item--no{% endif %}">
                                 Education: {{ candidate.education|join:", "|default:"not stated" }}
                             </li>
                             <li class="check-list__item {% if candidate.working_hours_match %}check-list__item--yes{% else %}check-list__item--no{% endif %}">
                                 Working hours compatible
                             </li>
-                            {% endif %}
                         </ul>
                     </div>
 

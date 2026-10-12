@@ -1,15 +1,13 @@
 """
 Views - each page checks the input, calls the matching service and shows a template.
 
-DATA_MODE=debug shows the sample results from dummy_data.py; DATA_MODE=live
-shows the visitor's own saved results.
+Results pages only show what the AI produced for the visitor's own upload,
+so nothing can be seen without the AI.
 """
 
-from django.conf import settings
 from django.contrib import messages
 from django.shortcuts import redirect, render
 
-from .dummy_data import sample_ranked_candidates, sample_ranked_jobs
 from .managers.data_manager import load_records
 from .managers.io_manager import (
     filter_bar,
@@ -21,10 +19,6 @@ from .managers.logic_manager import filter_jobs, rank_candidates, rank_jobs
 from .services.matching_service import match_candidates_to_job, match_jobs_to_resume, read_resume
 
 AI_FAILED = "The AI could not process your upload right now. Please try again later."
-
-
-def is_live_mode():
-    return settings.DATA_MODE == "live"
 
 
 def find_record(collection, record_id):
@@ -72,15 +66,11 @@ def employer_upload(request):
 
 def employer_results(request):
     """Employer results: candidates ranked against the job posting (no AI call)."""
-    job = None
-    if is_live_mode():
-        candidate_match = find_record("candidate_matches", request.session.get("candidate_match_id"))
-        candidates = []
-        if candidate_match:
-            job = candidate_match.get("job")
-            candidates = rank_candidates(candidate_match.get("candidates", []))
-    else:
-        candidates = sample_ranked_candidates()
+    job, candidates = None, []
+    candidate_match = find_record("candidate_matches", request.session.get("candidate_match_id"))
+    if candidate_match:
+        job = candidate_match.get("job")
+        candidates = rank_candidates(candidate_match.get("candidates", []))
     return render(
         request,
         "matcher/employer_results.html",
@@ -122,11 +112,8 @@ def job_seeker_upload(request):
 
 def job_results(request):
     """Job seeker results: suggested jobs, best first, with filters (no AI call)."""
-    if is_live_mode():
-        job_match = find_record("job_matches", request.session.get("job_match_id"))
-        all_jobs = rank_jobs(job_match.get("jobs", [])) if job_match else []
-    else:
-        all_jobs = sample_ranked_jobs()
+    job_match = find_record("job_matches", request.session.get("job_match_id"))
+    all_jobs = rank_jobs(job_match.get("jobs", [])) if job_match else []
 
     # Filters come from the URL, e.g. ?locations=North&industry=Technology+%2F+IT
     filters = read_job_filters(request.GET)
@@ -146,6 +133,5 @@ def job_results(request):
             "total_job_count": len(all_jobs),
             "filter_bar": filter_bar(filters),
             "filters_applied": bool(request.GET),
-            "show_jobstreet_links": is_live_mode(),
         },
     )

@@ -29,9 +29,12 @@ A Django web app that matches resumes and jobs using Google Gemini.
 **Both**
 
 - Drag-and-drop uploads, checked to be non-empty PDFs under the size limit.
-- `AI_MODE=mock` runs the whole app with fixed sample replies and no API key.
-- If Gemini is busy, the app retries and then tries a backup model. If the
-  AI still fails, the user sees a clear message instead of an error page.
+- **Everything depends on the AI.** There is no sample data or offline mode:
+  if Gemini can't process an upload, the user sees an error and can't reach
+  any results.
+- If Gemini is busy, the app retries and then tries a backup model. Replies
+  that aren't valid JSON or have the wrong structure are rejected and asked
+  for again.
 
 ---
 
@@ -122,8 +125,8 @@ cp .env.example .env
 copy .env.example .env
 ```
 
-The defaults run the app in mock mode with sample results. To use the real
-AI, see [Mock vs live](#mock-vs-live).
+Then add your Gemini API key to `.env` — the app needs it for every upload.
+See [Gemini API key](#gemini-api-key).
 
 ### 6. Run the app
 
@@ -145,23 +148,17 @@ You should see `Ran 49 tests ... OK`. Every test is a plain function in
 
 ---
 
-## Mock vs live
+## Gemini API key
 
-Two settings in `.env` control this. Restart `runserver` after changing them.
-
-| Setting | `mock` / `debug` (default) | `live` |
-|---|---|---|
-| `AI_MODE` | Fixed sample AI replies, no key needed | Real Gemini calls, needs `AI_API_KEY` |
-| `DATA_MODE` | Results pages show sample results from `dummy_data.py` | Results pages show the visitor's own saved results |
-
-For the full app, set both to `live` and add a free Gemini key from
-[Google AI Studio](https://aistudio.google.com/apikey):
+Get a free key from [Google AI Studio](https://aistudio.google.com/apikey)
+and put it in `.env`, then restart `runserver`:
 
 ```bash
-AI_MODE=live
-DATA_MODE=live
 AI_API_KEY=your-key-here
 ```
+
+Without a working key every upload fails with "The AI could not process
+your upload", and the results pages stay empty.
 
 On the free tier Gemini allows only a few requests per minute and a daily
 limit per model; check your usage at https://aistudio.google.com/usage.
@@ -182,17 +179,15 @@ avoid uploading real people's resumes you don't have permission to share.
 `.env` falls back to its default:
 
 ```python
-DATA_MODE = os.environ.get("DATA_MODE", "debug")
-#                          from .env ↑   default ↑
+MAX_JOBS = int(os.environ.get("MAX_JOBS", "15"))
+#                             from .env ↑  default ↑
 ```
 
 ### Available settings
 
 | Setting | Default | What it does |
 |---|---|---|
-| `AI_MODE` | `mock` | `mock` = sample AI replies, `live` = real Gemini calls |
-| `DATA_MODE` | `debug` | `debug` = sample results, `live` = the visitor's saved results |
-| `AI_API_KEY` | *(empty)* | Your Gemini API key (`GEMINI_API_KEY` also works) |
+| `AI_API_KEY` | *(empty)* | **Required.** Your Gemini API key (`GEMINI_API_KEY` also works) |
 | `AI_MODEL` | `gemini-3.8-flash` | Gemini model to use |
 | `AI_FALLBACK_MODELS` | `gemini-3.5-flash` | Backup models (comma-separated) tried if `AI_MODEL` is busy |
 | `MAX_UPLOAD_SIZE_MB` | `10` | Largest PDF users can upload |
@@ -244,7 +239,6 @@ INF1103_Group-3_Assgn1/
 └── matcher/
     ├── views.py                    # Pages: handle the request, show messages
     ├── urls.py
-    ├── dummy_data.py               # Sample results for DATA_MODE=debug
     ├── context_processors.py       # Adds ?v= to CSS/JS links so browsers load new versions
     ├── models.py                   # Empty: no database models
     ├── tests.py                    # Test functions, run by run_tests.py
