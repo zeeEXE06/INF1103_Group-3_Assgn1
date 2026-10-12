@@ -1,5 +1,5 @@
 """
-Data Manager - saves and loads records as JSON files in the data/ folder.
+Data Manager - saves, loads and queries records kept as JSON files in data/.
 
 Each collection is one file holding a list of records, e.g.
 load_records("resumes") reads data/resumes.json. Missing, empty or broken
@@ -56,3 +56,41 @@ def save_record(collection, record):
     tmp_path.write_text(json.dumps(records, indent=2), encoding="utf-8")
     tmp_path.replace(path)
     return record
+
+
+def find_record(collection, record_id):
+    """Return the record with this id, or None."""
+    if not record_id:
+        return None
+    matches = filter_records(collection, id=record_id)
+    return matches[0] if matches else None
+
+
+def filter_records(collection, **fields):
+    """Return the records whose fields all equal the given values.
+
+    e.g. filter_records("job_matches", resume_id="R001")
+    """
+    return [
+        record for record in load_records(collection)
+        if all(record.get(name) == value for name, value in fields.items())
+    ]
+
+
+def load_all_records():
+    """Load every collection in data/ (run once at startup).
+
+    Returns {"resumes": [...], "job_matches": [...], ...} and logs how many
+    records each has, so missing or broken files show up straight away.
+    """
+    if not settings.DATA_DIR.exists():
+        logger.info("No saved records yet (%s does not exist)", settings.DATA_DIR)
+        return {}
+
+    all_records = {}
+    for path in sorted(settings.DATA_DIR.glob("*.json")):
+        if path.name.endswith(".broken.json"):
+            continue
+        all_records[path.stem] = load_records(path.stem)
+        logger.info("Loaded %s %s", len(all_records[path.stem]), path.stem)
+    return all_records

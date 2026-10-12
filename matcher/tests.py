@@ -28,7 +28,7 @@ from .managers.ai_manager import (
     request_json,
     resume_schema_problem,
 )
-from .managers.data_manager import load_records, save_record
+from .managers.data_manager import filter_records, find_record, load_all_records, load_records, save_record
 from .managers.logic_manager import (
     calculate_score,
     filter_jobs,
@@ -467,6 +467,26 @@ def test_broken_file_is_kept_as_backup():
     save_record("resumes", {"filename": "a.pdf"})
     assert len(load_records("resumes")) == 1
     assert (settings.DATA_DIR / "resumes.broken.json").read_text() == "{not json"
+
+
+def test_find_and_filter_records():
+    save_record("job_matches", {"resume_id": "R001", "jobs": []})
+    save_record("job_matches", {"resume_id": "R002", "jobs": []})
+    save_record("job_matches", {"resume_id": "R001", "jobs": []})
+    assert find_record("job_matches", "J002")["resume_id"] == "R002"
+    assert find_record("job_matches", "J999") is None
+    assert find_record("job_matches", None) is None
+    assert [r["id"] for r in filter_records("job_matches", resume_id="R001")] == ["J001", "J003"]
+
+
+def test_load_all_records_at_startup():
+    assert load_all_records() == {}
+    save_record("resumes", {"filename": "a.pdf"})
+    save_record("job_matches", {"resume_id": "R001"})
+    (settings.DATA_DIR / "old.broken.json").write_text("{not json")
+    loaded = load_all_records()
+    assert sorted(loaded) == ["job_matches", "resumes"]
+    assert len(loaded["resumes"]) == 1
 
 
 # ---------- Logic Manager ----------

@@ -8,7 +8,7 @@ so nothing can be seen without the AI.
 from django.contrib import messages
 from django.shortcuts import redirect, render
 
-from .managers.data_manager import load_records
+from .managers.data_manager import find_record
 from .managers.io_manager import (
     filter_bar,
     read_employer_upload,
@@ -19,16 +19,6 @@ from .managers.logic_manager import filter_jobs, rank_candidates, rank_jobs
 from .services.matching_service import match_candidates_to_job, match_jobs_to_resume, read_resume
 
 AI_FAILED = "The AI could not process your upload right now. Please try again later."
-
-
-def find_record(collection, record_id):
-    """Return the saved record with this id, or None."""
-    if not record_id:
-        return None
-    for record in load_records(collection):
-        if record.get("id") == record_id:
-            return record
-    return None
 
 
 def landing(request):

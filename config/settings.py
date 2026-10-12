@@ -80,6 +80,15 @@ TIME_ZONE = "Asia/Singapore"
 USE_I18N = True
 USE_TZ = True
 
+# Show the app's own log messages (AI fallbacks, rejected replies, records
+# loaded at startup) in the runserver terminal
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "loggers": {"matcher": {"handlers": ["console"], "level": "INFO"}},
+}
+
 # --- Static files ------------------------------------------------------------
 
 STATIC_URL = "static/"

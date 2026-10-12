@@ -56,7 +56,7 @@ A Django web app that matches resumes and jobs using Google Gemini.
 |---|---|
 | `managers/io_manager.py` | Upload and filter forms, PDF checks |
 | `managers/ai_manager.py` | Sends prompts and PDFs to Gemini, retries, reads the JSON reply. No business logic. |
-| `managers/data_manager.py` | The only code that reads and writes `data/*.json`. Missing or broken files never crash the app. |
+| `managers/data_manager.py` | The only code that reads and writes `data/*.json`: saving, loading, the `find_record()` and `filter_records()` queries, and `load_all_records()` at startup. Missing or broken files never crash the app. |
 | `managers/logic_manager.py` | Scores and ranks candidates, ranks and filters jobs. Never calls the AI or reads files. |
 | `services/matching_service.py` | `read_resume()`, `match_jobs_to_resume()`, `match_candidates_to_job()` |
 
