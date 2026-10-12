@@ -20,6 +20,7 @@ from ..managers.io_manager import (
     LOCATION_CHOICES,
     WORK_ARRANGEMENT_CHOICES,
     WORKING_HOURS_CHOICES,
+    choice_values,
 )
 from ..managers.logic_manager import calculate_score, is_strong_match, select_top_jobs, to_score
 
@@ -29,11 +30,6 @@ JOBSTREET_BASE_URL = "https://sg.jobstreet.com"
 
 
 # ---------- Shared helpers ----------
-
-def choice_values(choices):
-    """[("WFH", "Work From Home"), ...] -> ["WFH", ...] (skips the "" = all option)."""
-    return [value for value, _label in choices if value]
-
 
 def filter_options():
     """The filter values the AI must choose from, for the prompts."""

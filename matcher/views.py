@@ -14,10 +14,10 @@ from django.shortcuts import redirect, render
 from .dummy_data import sample_ranked_candidates, sample_ranked_jobs
 from .managers.data_manager import load_records
 from .managers.io_manager import (
-    JobFilterForm,
-    JobPostingForm,
-    ResumeUploadForm,
-    validate_candidate_files,
+    filter_bar,
+    read_employer_upload,
+    read_job_filters,
+    read_resume_upload,
 )
 from .managers.logic_manager import filter_jobs, rank_candidates, rank_jobs
 from .services.matching_service import match_candidates_to_job, match_jobs_to_resume, read_resume
@@ -48,16 +48,12 @@ def landing(request):
 
 def employer_upload(request):
     """Employer uploads one job posting and one or more resumes."""
-    job_form = JobPostingForm()
-    candidate_errors = []
+    job_errors, candidate_errors = [], []
 
     if request.method == "POST":
-        job_form = JobPostingForm(request.POST, request.FILES)
-        candidate_files = request.FILES.getlist("candidate_files")
-        candidate_errors = validate_candidate_files(candidate_files)
+        job_file, candidate_files, job_errors, candidate_errors = read_employer_upload(request)
 
-        if job_form.is_valid() and not candidate_errors:
-            job_file = job_form.cleaned_data["job_file"]
+        if not job_errors and not candidate_errors:
             try:
                 candidate_match = match_candidates_to_job(job_file, candidate_files)
             except ValueError:
@@ -79,7 +75,7 @@ def employer_upload(request):
     return render(
         request,
         "matcher/employer.html",
-        {"job_form": job_form, "candidate_errors": candidate_errors},
+        {"job_errors": job_errors, "candidate_errors": candidate_errors},
     )
 
 
@@ -103,20 +99,20 @@ def employer_results(request):
 
 def job_seeker_upload(request):
     """Job seeker uploads a resume. Preferences are set as filters on the results page."""
+    resume_errors = []
     if request.method == "POST":
-        form = ResumeUploadForm(request.POST, request.FILES)
-        if form.is_valid():
-            resume_file = form.cleaned_data["resume_file"]
+        resume_file, resume_errors = read_resume_upload(request)
+        if not resume_errors:
             try:
                 resume = read_resume(resume_file)
             except ValueError:
                 messages.error(request, "Could not read the resume. Please try again.")
-                return render(request, "matcher/job_seeker.html", {"form": form})
+                return render(request, "matcher/job_seeker.html")
             except Exception:
                 # Bad/missing API key, network down, rate limit, etc.
                 logger.exception("AI call failed for %s", resume_file.name)
                 messages.error(request, AI_UNAVAILABLE)
-                return render(request, "matcher/job_seeker.html", {"form": form})
+                return render(request, "matcher/job_seeker.html")
 
             try:
                 job_match = match_jobs_to_resume(resume["id"])
@@ -136,10 +132,8 @@ def job_seeker_upload(request):
                 f"Resume received. Found {len(job_match['jobs'])} matching job title(s) to search on Jobstreet.",
             )
             return redirect("matcher:job_results")
-    else:
-        form = ResumeUploadForm()
 
-    return render(request, "matcher/job_seeker.html", {"form": form})
+    return render(request, "matcher/job_seeker.html", {"resume_errors": resume_errors})
 
 
 def job_results(request):
@@ -151,19 +145,14 @@ def job_results(request):
         all_jobs = sample_ranked_jobs()
 
     # Filters come from the URL, e.g. ?locations=North&industry=Technology+%2F+IT
-    filter_form = JobFilterForm(request.GET)
-    if filter_form.is_valid():
-        data = filter_form.cleaned_data
-        jobs = filter_jobs(
-            all_jobs,
-            data["work_arrangement"],
-            data["locations"],
-            data["working_hours"],
-            data["industry"],
-        )
-    else:
-        # Bad filter values in the URL - ignore them and show everything
-        jobs = all_jobs
+    filters = read_job_filters(request.GET)
+    jobs = filter_jobs(
+        all_jobs,
+        filters["work_arrangement"],
+        filters["locations"],
+        filters["working_hours"],
+        filters["industry"],
+    )
 
     return render(
         request,
@@ -171,7 +160,7 @@ def job_results(request):
         {
             "jobs": jobs,
             "total_job_count": len(all_jobs),
-            "filter_form": filter_form,
+            "filter_bar": filter_bar(filters),
             "filters_applied": bool(request.GET),
             "show_jobstreet_links": is_live_mode(),
         },

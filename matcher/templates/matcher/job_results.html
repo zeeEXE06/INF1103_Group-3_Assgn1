@@ -15,47 +15,25 @@
 {% if total_job_count %}
 <section class="container">
     <form method="get" class="filter-bar" aria-label="Filter jobs">
+        {% for group in filter_bar.groups %}
         <div class="filter-bar__group">
-            <p class="filter-bar__label">{{ filter_form.work_arrangement.label }}</p>
+            <p class="filter-bar__label">{{ group.label }}</p>
             <div class="choice-grid">
-                {% for checkbox in filter_form.work_arrangement %}
+                {% for option in group.options %}
                 <label class="choice-pill choice-pill--small">
-                    {{ checkbox.tag }}
-                    <span>{{ checkbox.choice_label }}</span>
+                    <input type="checkbox" name="{{ group.name }}" value="{{ option.value }}"{% if option.checked %} checked{% endif %}>
+                    <span>{{ option.label }}</span>
                 </label>
                 {% endfor %}
             </div>
         </div>
+        {% endfor %}
 
         <div class="filter-bar__group">
-            <p class="filter-bar__label">{{ filter_form.locations.label }}</p>
-            <div class="choice-grid">
-                {% for checkbox in filter_form.locations %}
-                <label class="choice-pill choice-pill--small">
-                    {{ checkbox.tag }}
-                    <span>{{ checkbox.choice_label }}</span>
-                </label>
-                {% endfor %}
-            </div>
-        </div>
-
-        <div class="filter-bar__group">
-            <p class="filter-bar__label">{{ filter_form.working_hours.label }}</p>
-            <div class="choice-grid">
-                {% for checkbox in filter_form.working_hours %}
-                <label class="choice-pill choice-pill--small">
-                    {{ checkbox.tag }}
-                    <span>{{ checkbox.choice_label }}</span>
-                </label>
-                {% endfor %}
-            </div>
-        </div>
-
-        <div class="filter-bar__group">
-            <label class="filter-bar__label" for="{{ filter_form.industry.id_for_label }}">{{ filter_form.industry.label }}</label>
-            <select name="{{ filter_form.industry.html_name }}" id="{{ filter_form.industry.id_for_label }}" class="select-box">
-                {% for value, label in filter_form.industry.field.choices %}
-                <option value="{{ value }}" {% if filter_form.industry.value == value %}selected{% endif %}>{{ label }}</option>
+            <label class="filter-bar__label" for="id_industry">Industry</label>
+            <select name="industry" id="id_industry" class="select-box">
+                {% for option in filter_bar.industries %}
+                <option value="{{ option.value }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>
                 {% endfor %}
             </select>
         </div>

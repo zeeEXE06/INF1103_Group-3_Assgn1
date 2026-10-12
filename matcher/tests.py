@@ -187,7 +187,7 @@ class JobSeekerWorkflowTests(TempDataDirMixin, TestCase):
     def test_missing_resume_reshows_form_with_errors(self):
         response = self.client.post(reverse("matcher:job_seeker_upload"), {})
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "This field is required")
+        self.assertContains(response, "Upload your resume")
 
     @override_settings(DATA_MODE="debug")
     def test_results_page_shows_ranked_jobs(self):
