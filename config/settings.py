@@ -30,7 +30,6 @@ ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").sp
 
 INSTALLED_APPS = [
     "django.contrib.staticfiles",
-    "django.contrib.sessions",
     "django.contrib.messages",
     "matcher",
 ]

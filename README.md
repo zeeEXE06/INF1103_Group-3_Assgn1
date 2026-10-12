@@ -134,7 +134,6 @@ See [Gemini API key](#gemini-api-key).
 ### 6. Run the app
 
 ```bash
-python manage.py migrate   # sets up Django's own internal tables only
 python manage.py runserver
 ```
 
@@ -225,7 +224,7 @@ theirs, so the results pages only show their own results. These files hold
 people's personal details, so they are listed in `.gitignore` and should be
 kept out of git.
 
-`db.sqlite3` is only used by Django itself, not for app data.
+The app doesn't use a database: sessions are signed cookies and data is JSON.
 
 ---
 
