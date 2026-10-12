@@ -1,0 +1,476 @@
+[
+  {
+    "id": "R001",
+    "filename": "Nabiil Resume..pdf",
+    "uploaded_at": "2026-10-09T02:57:05+00:00",
+    "education": [
+      {
+        "qualification": "B.Sc.",
+        "institution": "Sample University",
+        "field_of_study": "Computer Science",
+        "start_date": "2020",
+        "end_date": "2024"
+      }
+    ],
+    "experience": [
+      {
+        "job_title": "Software Developer Intern",
+        "company": "Sample Company",
+        "start_date": "2023",
+        "end_date": "2023"
+      }
+    ],
+    "skills": [
+      {
+        "skill": "Python"
+      },
+      {
+        "skill": "Django"
+      }
+    ]
+  },
+  {
+    "id": "R002",
+    "filename": "Nabiil Resume..pdf",
+    "uploaded_at": "2026-10-09T02:58:26+00:00",
+    "education": [
+      {
+        "qualification": "Diploma",
+        "institution": "Singapore Polytechnic",
+        "field_of_study": "Electrical & Electronic Engineering",
+        "start_date": "April 2021",
+        "end_date": "May 2024"
+      },
+      {
+        "qualification": "GCE 'O' Level",
+        "institution": "Woodlands Ring Secondary School",
+        "field_of_study": "",
+        "start_date": "January 2017",
+        "end_date": "October 2020"
+      }
+    ],
+    "experience": [
+      {
+        "job_title": "Intern",
+        "company": "Singpilot - PSA Pasir Panjang",
+        "start_date": "March 2023",
+        "end_date": "August 2023"
+      }
+    ],
+    "skills": [
+      {
+        "skill": "Soldering"
+      },
+      {
+        "skill": "Hands-on Troubleshooting"
+      },
+      {
+        "skill": "IC Testing"
+      },
+      {
+        "skill": "Electrical Engineering"
+      },
+      {
+        "skill": "Digital Electronics"
+      },
+      {
+        "skill": "Programmable Logic Controller (PLC) Programming"
+      },
+      {
+        "skill": "C++ Programming"
+      },
+      {
+        "skill": "AutoCAD"
+      }
+    ]
+  },
+  {
+    "id": "R003",
+    "filename": "Nabiil Resume..pdf",
+    "uploaded_at": "2026-10-09T03:09:11+00:00",
+    "education": [
+      {
+        "qualification": "Diploma",
+        "institution": "Singapore Polytechnic",
+        "field_of_study": "Electrical & Electronic Engineering",
+        "start_date": "April 2021",
+        "end_date": "May 2024"
+      },
+      {
+        "qualification": "GCE \u2018O\u2019 Level",
+        "institution": "Woodlands Ring Secondary School",
+        "field_of_study": "",
+        "start_date": "January 2017",
+        "end_date": "October 2020"
+      }
+    ],
+    "experience": [
+      {
+        "job_title": "Intern",
+        "company": "Singpilot - PSA Pasir Panjang",
+        "start_date": "March 2023",
+        "end_date": "August 2023"
+      }
+    ],
+    "skills": [
+      {
+        "skill": "Problem Solving"
+      },
+      {
+        "skill": "Team Player"
+      },
+      {
+        "skill": "Self-motivated & Adaptable"
+      },
+      {
+        "skill": "Meticulous"
+      },
+      {
+        "skill": "Works Well Under Pressure"
+      },
+      {
+        "skill": "English"
+      },
+      {
+        "skill": "Malay"
+      },
+      {
+        "skill": "Soldering"
+      },
+      {
+        "skill": "Hands-on Troubleshooting"
+      },
+      {
+        "skill": "IC Testing"
+      },
+      {
+        "skill": "Electrical Engineering"
+      },
+      {
+        "skill": "Digital Electronics"
+      },
+      {
+        "skill": "Programmable Logic Controller (PLC) Programming"
+      },
+      {
+        "skill": "C++ Programming"
+      },
+      {
+        "skill": "AutoCAD"
+      }
+    ]
+  },
+  {
+    "id": "R004",
+    "filename": "Nabiil Resume..pdf",
+    "uploaded_at": "2026-10-09T03:11:03+00:00",
+    "education": [
+      {
+        "qualification": "Diploma",
+        "institution": "Singapore Polytechnic",
+        "field_of_study": "Electrical & Electronic Engineering",
+        "start_date": "April 2021",
+        "end_date": "May 2024"
+      },
+      {
+        "qualification": "GCE \u2018O\u2019 Level",
+        "institution": "Woodlands Ring Secondary School",
+        "field_of_study": "",
+        "start_date": "January 2017",
+        "end_date": "October 2020"
+      }
+    ],
+    "experience": [
+      {
+        "job_title": "Intern",
+        "company": "Singpilot - PSA Pasir Panjang",
+        "start_date": "March 2023",
+        "end_date": "August 2023"
+      }
+    ],
+    "skills": [
+      {
+        "skill": "Problem Solving"
+      },
+      {
+        "skill": "Team Player"
+      },
+      {
+        "skill": "Self-motivated & Adaptable"
+      },
+      {
+        "skill": "Meticulous"
+      },
+      {
+        "skill": "Works Well Under Pressure"
+      },
+      {
+        "skill": "English"
+      },
+      {
+        "skill": "Malay"
+      },
+      {
+        "skill": "Soldering"
+      },
+      {
+        "skill": "Hands-on Troubleshooting"
+      },
+      {
+        "skill": "IC Testing"
+      },
+      {
+        "skill": "Electrical Engineering"
+      },
+      {
+        "skill": "Digital Electronics"
+      },
+      {
+        "skill": "Programmable Logic Controller (PLC) Programming"
+      },
+      {
+        "skill": "C++ Programming"
+      },
+      {
+        "skill": "AutoCAD"
+      }
+    ]
+  },
+  {
+    "id": "R005",
+    "filename": "Nabiil Resume..pdf",
+    "uploaded_at": "2026-10-09T03:18:46+00:00",
+    "education": [
+      {
+        "qualification": "Diploma",
+        "institution": "Singapore Polytechnic",
+        "field_of_study": "Electrical & Electronic Engineering",
+        "start_date": "April 2021",
+        "end_date": "May 2024"
+      },
+      {
+        "qualification": "GCE \u2018O\u2019 Level",
+        "institution": "Woodlands Ring Secondary School",
+        "field_of_study": "",
+        "start_date": "January 2017",
+        "end_date": "October 2020"
+      }
+    ],
+    "experience": [
+      {
+        "job_title": "Intern",
+        "company": "Singpilot - PSA Pasir Panjang",
+        "start_date": "March 2023",
+        "end_date": "August 2023"
+      }
+    ],
+    "skills": [
+      {
+        "skill": "Problem Solving"
+      },
+      {
+        "skill": "Team Player"
+      },
+      {
+        "skill": "Self-motivated & Adaptable"
+      },
+      {
+        "skill": "Meticulous"
+      },
+      {
+        "skill": "Works Well Under Pressure"
+      },
+      {
+        "skill": "English"
+      },
+      {
+        "skill": "Malay"
+      },
+      {
+        "skill": "Soldering"
+      },
+      {
+        "skill": "Hands-on Troubleshooting"
+      },
+      {
+        "skill": "IC Testing"
+      },
+      {
+        "skill": "Electrical Engineering"
+      },
+      {
+        "skill": "Digital Electronics"
+      },
+      {
+        "skill": "Programmable Logic Controller (PLC) Programming"
+      },
+      {
+        "skill": "C++ Programming"
+      },
+      {
+        "skill": "AutoCAD"
+      }
+    ]
+  },
+  {
+    "id": "R006",
+    "filename": "Nabiil Resume..pdf",
+    "uploaded_at": "2026-10-09T03:22:23+00:00",
+    "education": [
+      {
+        "qualification": "Diploma",
+        "institution": "Singapore Polytechnic",
+        "field_of_study": "Electrical & Electronic Engineering",
+        "start_date": "April 2021",
+        "end_date": "May 2024"
+      },
+      {
+        "qualification": "GCE \u2018O\u2019 Level",
+        "institution": "Woodlands Ring Secondary School",
+        "field_of_study": "",
+        "start_date": "January 2017",
+        "end_date": "October 2020"
+      }
+    ],
+    "experience": [
+      {
+        "job_title": "Intern",
+        "company": "Singpilot - PSA Pasir Panjang",
+        "start_date": "March 2023",
+        "end_date": "August 2023"
+      }
+    ],
+    "skills": [
+      {
+        "skill": "Problem Solving"
+      },
+      {
+        "skill": "Team Player"
+      },
+      {
+        "skill": "Self-motivated & Adaptable"
+      },
+      {
+        "skill": "Meticulous"
+      },
+      {
+        "skill": "Works Well Under Pressure"
+      },
+      {
+        "skill": "English"
+      },
+      {
+        "skill": "Malay"
+      },
+      {
+        "skill": "Soldering"
+      },
+      {
+        "skill": "Hands-on Troubleshooting"
+      },
+      {
+        "skill": "IC Testing"
+      },
+      {
+        "skill": "Electrical Engineering"
+      },
+      {
+        "skill": "Digital Electronics"
+      },
+      {
+        "skill": "Programmable Logic Controller (PLC) Programming"
+      },
+      {
+        "skill": "C++ Programming"
+      },
+      {
+        "skill": "AutoCAD"
+      },
+      {
+        "skill": "MPLabX"
+      },
+      {
+        "skill": "NI Multisim"
+      },
+      {
+        "skill": "TIA Portal"
+      }
+    ]
+  },
+  {
+    "id": "R007",
+    "filename": "Nabiil Resume..pdf",
+    "uploaded_at": "2026-10-09T03:45:55+00:00",
+    "education": [
+      {
+        "qualification": "Diploma",
+        "institution": "Singapore Polytechnic",
+        "field_of_study": "Electrical & Electronic Engineering",
+        "start_date": "April 2021",
+        "end_date": "May 2024"
+      },
+      {
+        "qualification": "GCE 'O' Level",
+        "institution": "Woodlands Ring Secondary School",
+        "field_of_study": "",
+        "start_date": "January 2017",
+        "end_date": "October 2020"
+      }
+    ],
+    "experience": [
+      {
+        "job_title": "Intern",
+        "company": "Singpilot - PSA Pasir Panjang",
+        "start_date": "March 2023",
+        "end_date": "August 2023"
+      }
+    ],
+    "skills": [
+      {
+        "skill": "Problem Solving"
+      },
+      {
+        "skill": "Team Player"
+      },
+      {
+        "skill": "Self-motivated & Adaptable"
+      },
+      {
+        "skill": "Meticulous"
+      },
+      {
+        "skill": "Works Well Under Pressure"
+      },
+      {
+        "skill": "English"
+      },
+      {
+        "skill": "Malay"
+      },
+      {
+        "skill": "Soldering"
+      },
+      {
+        "skill": "Hands-on Troubleshooting"
+      },
+      {
+        "skill": "IC Testing"
+      },
+      {
+        "skill": "Electrical Engineering"
+      },
+      {
+        "skill": "Digital Electronics"
+      },
+      {
+        "skill": "Programmable Logic Controller (PLC) Programming"
+      },
+      {
+        "skill": "C++ Programming"
+      },
+      {
+        "skill": "AutoCAD"
+      }
+    ]
+  }
+]

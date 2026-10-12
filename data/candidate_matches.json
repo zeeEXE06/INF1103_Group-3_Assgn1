@@ -1,0 +1,128 @@
+[
+  {
+    "id": "C001",
+    "created_at": "2026-10-09T04:07:57+00:00",
+    "job": {
+      "filename": "job_post.pdf",
+      "title": "Junior Software Developer",
+      "company": "Your Company Name",
+      "required_skills": [
+        "Python",
+        "JavaScript",
+        "Git",
+        "GitHub",
+        "databases",
+        "REST APIs",
+        "Good communication",
+        "Willingness to learn"
+      ],
+      "location": "",
+      "work_arrangement": "Hybrid",
+      "working_hours": "Standard",
+      "industry": "Technology / IT"
+    },
+    "candidates": [
+      {
+        "filename": "Nabiil Resume..pdf",
+        "name": "MUHAMMAD NABIIL BIN HASBULLAH",
+        "matched_skills": [],
+        "missing_skills": [
+          "Python",
+          "JavaScript",
+          "Git",
+          "GitHub",
+          "databases",
+          "REST APIs",
+          "Good communication",
+          "Willingness to learn"
+        ],
+        "experience": [
+          "Intern, 0.5 years"
+        ],
+        "education": [
+          "Diploma, Electrical & Electronic Engineering"
+        ],
+        "location": "North",
+        "work_arrangement": "",
+        "working_hours": "",
+        "summary": "An Electrical & Electronic Engineering graduate with no programming experience in Python, JavaScript, or web development.",
+        "unreadable": false,
+        "experience_match": false,
+        "education_match": true,
+        "location_match": true,
+        "work_arrangement_match": true,
+        "working_hours_match": true,
+        "match_score": 35,
+        "strong_match": false
+      },
+      {
+        "filename": "resume_aisha_rahman.pdf",
+        "name": "Aisha Rahman",
+        "matched_skills": [
+          "Python",
+          "JavaScript",
+          "Git",
+          "GitHub",
+          "databases",
+          "REST APIs",
+          "Good communication",
+          "Willingness to learn"
+        ],
+        "missing_skills": [],
+        "experience": [
+          "Teaching Assistant, 1 year"
+        ],
+        "education": [
+          "BEng Computer Engineering"
+        ],
+        "location": "",
+        "work_arrangement": "",
+        "working_hours": "",
+        "summary": "A final-year Computer Engineering student who matches all technical and soft skill requirements for the role.",
+        "unreadable": false,
+        "experience_match": true,
+        "education_match": true,
+        "location_match": true,
+        "work_arrangement_match": true,
+        "working_hours_match": true,
+        "match_score": 100,
+        "strong_match": true
+      },
+      {
+        "filename": "resume_daniel_tan.pdf",
+        "name": "Daniel Tan",
+        "matched_skills": [
+          "Python",
+          "JavaScript",
+          "Git",
+          "GitHub",
+          "databases",
+          "REST APIs"
+        ],
+        "missing_skills": [
+          "Good communication",
+          "Willingness to learn"
+        ],
+        "experience": [
+          "Junior Software Developer, 1 year",
+          "Software Engineering Intern, 0.5 years"
+        ],
+        "education": [
+          "BSc Computer Science"
+        ],
+        "location": "",
+        "work_arrangement": "",
+        "working_hours": "",
+        "summary": "An experienced Computer Science graduate with 1.5 years of professional web development experience using Python and JavaScript.",
+        "unreadable": false,
+        "experience_match": true,
+        "education_match": true,
+        "location_match": true,
+        "work_arrangement_match": true,
+        "working_hours_match": true,
+        "match_score": 90,
+        "strong_match": true
+      }
+    ]
+  }
+]

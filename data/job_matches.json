@@ -1,0 +1,311 @@
+[
+  {
+    "id": "J001",
+    "resume_id": "R001",
+    "searched_at": "2026-10-09T02:57:05+00:00",
+    "jobs": [
+      {
+        "title": "Junior Python Developer",
+        "company": "Sample Tech Pte Ltd",
+        "url": "https://sg.jobstreet.com/job/00000001",
+        "location": "Central",
+        "work_arrangement": "Hybrid",
+        "working_hours": "Standard",
+        "industry": "Technology / IT",
+        "required_skills": [
+          "Python",
+          "Django"
+        ],
+        "matched_skills": [
+          "Python",
+          "Django"
+        ],
+        "match_reason": "Uses the candidate's Python and Django skills."
+      }
+    ]
+  },
+  {
+    "id": "J002",
+    "resume_id": "R002",
+    "searched_at": "2026-10-09T03:18:03+00:00",
+    "jobs": [
+      {
+        "title": "Assistant Electrical Engineer",
+        "url": "https://sg.jobstreet.com/assistant-electrical-engineer-jobs",
+        "industry": "Engineering & Manufacturing",
+        "matched_skills": [
+          "Electrical Engineering",
+          "AutoCAD",
+          "Hands-on Troubleshooting"
+        ],
+        "match_reason": "A Diploma in Electrical & Electronic Engineering along with AutoCAD proficiency aligns directly with entry-level assistant engineer roles supporting electrical system designs and field operations."
+      },
+      {
+        "title": "Junior Automation Engineer",
+        "url": "https://sg.jobstreet.com/junior-automation-engineer-jobs",
+        "industry": "Industrial Automation",
+        "matched_skills": [
+          "Programmable Logic Controller (PLC) Programming",
+          "C++ Programming",
+          "Hands-on Troubleshooting"
+        ],
+        "match_reason": "Knowledge of PLC and C++ programming coupled with port intern experience makes the candidate a solid fit for programming and commissioning automated industrial systems."
+      },
+      {
+        "title": "Assistant Electronics Engineer",
+        "url": "https://sg.jobstreet.com/assistant-electronics-engineer-jobs",
+        "industry": "Electronics",
+        "matched_skills": [
+          "Digital Electronics",
+          "Soldering",
+          "Hands-on Troubleshooting"
+        ],
+        "match_reason": "Possesses foundational diploma coursework in digital electronics along with practical board-level skills like soldering and hardware troubleshooting."
+      },
+      {
+        "title": "IC Test Technician",
+        "url": "https://sg.jobstreet.com/ic-test-technician-jobs",
+        "industry": "Semiconductor",
+        "matched_skills": [
+          "IC Testing",
+          "Digital Electronics",
+          "Hands-on Troubleshooting"
+        ],
+        "match_reason": "Direct experience with IC testing and digital electronics positions the candidate well for semiconductor test floor and product characterization positions."
+      },
+      {
+        "title": "Electrical Maintenance Technician",
+        "url": "https://sg.jobstreet.com/electrical-maintenance-technician-jobs",
+        "industry": "Facilities & Maintenance",
+        "matched_skills": [
+          "Electrical Engineering",
+          "Programmable Logic Controller (PLC) Programming",
+          "Hands-on Troubleshooting"
+        ],
+        "match_reason": "Strong hands-on troubleshooting capabilities and knowledge of PLC systems suit operational maintenance and breakdown repair roles across Singapore's industrial facilities."
+      }
+    ]
+  },
+  {
+    "id": "J003",
+    "resume_id": "R005",
+    "searched_at": "2026-10-09T03:19:05+00:00",
+    "jobs": [
+      {
+        "title": "Junior Electrical Engineer",
+        "url": "https://sg.jobstreet.com/junior-electrical-engineer-jobs",
+        "industry": "Engineering",
+        "matched_skills": [
+          "Electrical Engineering",
+          "AutoCAD",
+          "Hands-on Troubleshooting",
+          "Problem Solving"
+        ],
+        "match_reason": "Directly matches your diploma qualification in Electrical & Electronic Engineering and foundation in AutoCAD and troubleshooting."
+      },
+      {
+        "title": "Electronics Technician",
+        "url": "https://sg.jobstreet.com/electronics-technician-jobs",
+        "industry": "Electronics & Manufacturing",
+        "matched_skills": [
+          "Digital Electronics",
+          "Soldering",
+          "Hands-on Troubleshooting",
+          "Meticulous"
+        ],
+        "match_reason": "Ideal entry-level technical role utilizing practical component-level skills like soldering, circuit testing, and hardware troubleshooting."
+      },
+      {
+        "title": "Junior Automation Engineer",
+        "url": "https://sg.jobstreet.com/junior-automation-engineer-jobs",
+        "industry": "Industrial Automation",
+        "matched_skills": [
+          "Programmable Logic Controller (PLC) Programming",
+          "C++ Programming",
+          "Hands-on Troubleshooting",
+          "Problem Solving"
+        ],
+        "match_reason": "Leverages your PLC programming and C++ skills to develop and maintain automated systems and machinery."
+      },
+      {
+        "title": "IC Test Technician",
+        "url": "https://sg.jobstreet.com/ic-test-technician-jobs",
+        "industry": "Semiconductors",
+        "matched_skills": [
+          "IC Testing",
+          "Digital Electronics",
+          "Meticulous",
+          "Hands-on Troubleshooting"
+        ],
+        "match_reason": "Fits your specialized academic training in integrated circuit testing and digital electronics within Singapore's semiconductor sector."
+      },
+      {
+        "title": "Equipment Technician",
+        "url": "https://sg.jobstreet.com/equipment-technician-jobs",
+        "industry": "Manufacturing & Operations",
+        "matched_skills": [
+          "Electrical Engineering",
+          "Hands-on Troubleshooting",
+          "Soldering",
+          "Works Well Under Pressure"
+        ],
+        "match_reason": "Aligns with hands-on maintenance, diagnostic capabilities, and industrial exposure gained during your port operations internship."
+      }
+    ]
+  },
+  {
+    "id": "J004",
+    "resume_id": "R006",
+    "searched_at": "2026-10-09T03:22:36+00:00",
+    "jobs": [
+      {
+        "title": "Junior Electrical Engineer",
+        "url": "https://sg.jobstreet.com/junior-electrical-engineer-jobs",
+        "industry": "Engineering & Technical",
+        "matched_skills": [
+          "Electrical Engineering",
+          "AutoCAD",
+          "NI Multisim",
+          "Hands-on Troubleshooting"
+        ],
+        "match_reason": "Directly matches your diploma qualification along with foundational circuit simulation, technical drafting, and troubleshooting skills."
+      },
+      {
+        "title": "Junior Automation Engineer",
+        "url": "https://sg.jobstreet.com/junior-automation-engineer-jobs",
+        "industry": "Industrial Automation",
+        "matched_skills": [
+          "Programmable Logic Controller (PLC) Programming",
+          "TIA Portal",
+          "C++ Programming",
+          "Hands-on Troubleshooting"
+        ],
+        "match_reason": "Suits your proficiency in PLC programming and TIA Portal, which are highly sought after in Singapore's manufacturing and automation sectors."
+      },
+      {
+        "title": "Electronics Test Technician",
+        "url": "https://sg.jobstreet.com/electronics-test-technician-jobs",
+        "industry": "Semiconductor & Electronics",
+        "matched_skills": [
+          "IC Testing",
+          "Digital Electronics",
+          "Soldering",
+          "NI Multisim"
+        ],
+        "match_reason": "Aligns with your practical laboratory training in component testing, digital circuitry, and hardware assembly."
+      },
+      {
+        "title": "Electrical Maintenance Technician",
+        "url": "https://sg.jobstreet.com/electrical-maintenance-technician-jobs",
+        "industry": "Facilities & Manufacturing",
+        "matched_skills": [
+          "Electrical Engineering",
+          "Hands-on Troubleshooting",
+          "Problem Solving",
+          "Meticulous"
+        ],
+        "match_reason": "A strong fit for hands-on maintenance operations, leveraging your diagnostic abilities and core electrical training."
+      },
+      {
+        "title": "Field Service Technician",
+        "url": "https://sg.jobstreet.com/field-service-technician-jobs",
+        "industry": "Engineering Services",
+        "matched_skills": [
+          "Hands-on Troubleshooting",
+          "Electrical Engineering",
+          "Works Well Under Pressure",
+          "Self-motivated & Adaptable"
+        ],
+        "match_reason": "Matches your port-internship operational exposure, troubleshooting capabilities, and ability to handle on-site equipment servicing."
+      }
+    ]
+  },
+  {
+    "id": "J005",
+    "resume_id": "R007",
+    "searched_at": "2026-10-09T03:46:11+00:00",
+    "jobs": [
+      {
+        "title": "Assistant Electrical Engineer",
+        "url": "https://sg.jobstreet.com/assistant-electrical-engineer-jobs",
+        "match_score": 92,
+        "location": "West",
+        "work_arrangement": "On-site",
+        "working_hours": "Standard",
+        "industry": "Manufacturing",
+        "matched_skills": [
+          "Electrical Engineering",
+          "AutoCAD",
+          "Hands-on Troubleshooting",
+          "Digital Electronics",
+          "Problem Solving"
+        ],
+        "match_reason": "Directly matches the candidate's Diploma in Electrical & Electronic Engineering, AutoCAD skills, and hands-on technical foundation."
+      },
+      {
+        "title": "Electronics Technician",
+        "url": "https://sg.jobstreet.com/electronics-technician-jobs",
+        "match_score": 89,
+        "location": "West",
+        "work_arrangement": "On-site",
+        "working_hours": "Standard",
+        "industry": "Manufacturing",
+        "matched_skills": [
+          "Digital Electronics",
+          "Soldering",
+          "Hands-on Troubleshooting",
+          "Meticulous"
+        ],
+        "match_reason": "Ideal entry-level technical role aligning with practical lab competencies such as soldering, component diagnostics, and circuit troubleshooting."
+      },
+      {
+        "title": "Automation Technician",
+        "url": "https://sg.jobstreet.com/automation-technician-jobs",
+        "match_score": 85,
+        "location": "West",
+        "work_arrangement": "On-site",
+        "working_hours": "Shift-based",
+        "industry": "Manufacturing",
+        "matched_skills": [
+          "Programmable Logic Controller (PLC) Programming",
+          "Hands-on Troubleshooting",
+          "C++ Programming",
+          "Problem Solving"
+        ],
+        "match_reason": "Leverages the candidate's PLC and C++ programming knowledge along with port-related systems troubleshooting experience."
+      },
+      {
+        "title": "Test Technician",
+        "url": "https://sg.jobstreet.com/test-technician-jobs",
+        "match_score": 82,
+        "location": "North",
+        "work_arrangement": "On-site",
+        "working_hours": "Shift-based",
+        "industry": "Manufacturing",
+        "matched_skills": [
+          "IC Testing",
+          "Digital Electronics",
+          "Hands-on Troubleshooting",
+          "Meticulous"
+        ],
+        "match_reason": "Fits the candidate's specialized knowledge in IC testing and electronics quality verification, especially in semiconductor fabrication."
+      },
+      {
+        "title": "Equipment Maintenance Technician",
+        "url": "https://sg.jobstreet.com/equipment-maintenance-technician-jobs",
+        "match_score": 78,
+        "location": "West",
+        "work_arrangement": "On-site",
+        "working_hours": "Shift-based",
+        "industry": "Logistics / Supply Chain",
+        "matched_skills": [
+          "Electrical Engineering",
+          "Hands-on Troubleshooting",
+          "Works Well Under Pressure",
+          "Team Player"
+        ],
+        "match_reason": "Aligns with hands-on industrial equipment support and the candidate's internship experience in a demanding port terminal environment."
+      }
+    ]
+  }
+]
