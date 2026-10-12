@@ -1,84 +1,15 @@
 """
-I/O Manager - the upload and filter forms, and the checks on what users submit.
+I/O Manager - reads and checks what users submit, and prepares the filter
+options shown on the job results page.
 """
 
-from django import forms
 from django.conf import settings
-from django.core.exceptions import ValidationError
 
 
-# ---------- File checks ----------
+# ---------- Filter options ----------
 
-def validate_pdf_file(uploaded_file):
-    """Check that an uploaded file is a PDF, not empty and under the size limit."""
-    file_name = uploaded_file.name.lower()
-    if not file_name.endswith(".pdf"):
-        raise ValidationError(f"'{uploaded_file.name}' is not a PDF file.")
-
-    max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
-    if uploaded_file.size > max_bytes:
-        raise ValidationError(
-            f"'{uploaded_file.name}' is larger than the "
-            f"{settings.MAX_UPLOAD_SIZE_MB}MB limit."
-        )
-
-    if uploaded_file.size == 0:
-        raise ValidationError(f"'{uploaded_file.name}' is empty.")
-
-
-# ---------- Employer input ----------
-
-def validate_candidate_files(candidate_files):
-    """Check the employer's resume uploads. Returns a list of error messages."""
-    if not candidate_files:
-        return ["Upload at least one candidate resume (PDF)."]
-
-    errors = []
-    if len(candidate_files) > settings.MAX_CANDIDATES:
-        # All resumes go to the AI in one request, so keep the batch small
-        errors.append(f"Upload at most {settings.MAX_CANDIDATES} resumes at a time.")
-    for uploaded_file in candidate_files:
-        try:
-            validate_pdf_file(uploaded_file)
-        except ValidationError as exc:
-            errors.append(exc.message)
-    return errors
-
-
-class JobPostingForm(forms.Form):
-    """Employer uploads the job description PDF."""
-
-    job_file = forms.FileField(
-        label="Job Description (PDF)",
-        widget=forms.ClearableFileInput(attrs={"accept": ".pdf"}),
-    )
-
-    def clean_job_file(self):
-        uploaded_file = self.cleaned_data["job_file"]
-        validate_pdf_file(uploaded_file)
-        return uploaded_file
-
-
-# ---------- Job seeker input ----------
-
-class ResumeUploadForm(forms.Form):
-    """Job seeker uploads their resume."""
-
-    resume_file = forms.FileField(
-        label="Your Resume (PDF)",
-        widget=forms.ClearableFileInput(attrs={"accept": ".pdf"}),
-    )
-
-    def clean_resume_file(self):
-        uploaded_file = self.cleaned_data["resume_file"]
-        validate_pdf_file(uploaded_file)
-        return uploaded_file
-
-
-# ---------- Job results filters ----------
-
-# Filter options on the job results page. The AI is told to use these same
-# values, so they match what's saved on each job (e.g. location "Central").
+# The AI is told to use these same values, so they match what's saved on each
+# job (e.g. location "Central").
 WORK_ARRANGEMENT_CHOICES = [
     ("WFH", "Work From Home"),
     ("Hybrid", "Hybrid"),
@@ -114,31 +45,98 @@ INDUSTRY_CHOICES = [
     ("Other", "Other"),
 ]
 
+# The checkbox filters: (name in the URL, label, choices)
+CHECKBOX_FILTERS = [
+    ("work_arrangement", "Work Arrangement", WORK_ARRANGEMENT_CHOICES),
+    ("locations", "Location(s)", LOCATION_CHOICES),
+    ("working_hours", "Working Hours", WORKING_HOURS_CHOICES),
+]
 
-class JobFilterForm(forms.Form):
-    """Filters on the job results page. All optional - nothing ticked = show all."""
 
-    work_arrangement = forms.MultipleChoiceField(
-        label="Work Arrangement",
-        choices=WORK_ARRANGEMENT_CHOICES,
-        widget=forms.CheckboxSelectMultiple,
-        required=False,
-    )
-    locations = forms.MultipleChoiceField(
-        label="Location(s)",
-        choices=LOCATION_CHOICES,
-        widget=forms.CheckboxSelectMultiple,
-        required=False,
-    )
-    working_hours = forms.MultipleChoiceField(
-        label="Working Hours",
-        choices=WORKING_HOURS_CHOICES,
-        widget=forms.CheckboxSelectMultiple,
-        required=False,
-    )
-    industry = forms.ChoiceField(
-        label="Industry",
-        choices=INDUSTRY_CHOICES,
-        widget=forms.Select,
-        required=False,
-    )
+# ---------- Upload checks ----------
+
+def check_pdf(uploaded_file):
+    """Return an error message if the file is not a usable PDF, else None."""
+    if not uploaded_file.name.lower().endswith(".pdf"):
+        return f"'{uploaded_file.name}' is not a PDF file."
+    if uploaded_file.size > settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024:
+        return f"'{uploaded_file.name}' is larger than the {settings.MAX_UPLOAD_SIZE_MB}MB limit."
+    if uploaded_file.size == 0:
+        return f"'{uploaded_file.name}' is empty."
+    return None
+
+
+def read_resume_upload(request):
+    """Job seeker's upload. Returns (resume_file, errors)."""
+    resume_file = request.FILES.get("resume_file")
+    if resume_file is None:
+        return None, ["Upload your resume (PDF)."]
+    error = check_pdf(resume_file)
+    return resume_file, [error] if error else []
+
+
+def read_employer_upload(request):
+    """Employer's upload. Returns (job_file, candidate_files, job_errors, candidate_errors)."""
+    job_file = request.FILES.get("job_file")
+    if job_file is None:
+        job_errors = ["Upload the job description (PDF)."]
+    else:
+        error = check_pdf(job_file)
+        job_errors = [error] if error else []
+
+    candidate_files = request.FILES.getlist("candidate_files")
+    if not candidate_files:
+        candidate_errors = ["Upload at least one candidate resume (PDF)."]
+    else:
+        candidate_errors = []
+        if len(candidate_files) > settings.MAX_CANDIDATES:
+            # All resumes go to the AI in one request, so keep the batch small
+            candidate_errors.append(f"Upload at most {settings.MAX_CANDIDATES} resumes at a time.")
+        for uploaded_file in candidate_files:
+            error = check_pdf(uploaded_file)
+            if error:
+                candidate_errors.append(error)
+
+    return job_file, candidate_files, job_errors, candidate_errors
+
+
+# ---------- Job results filters ----------
+
+def choice_values(choices):
+    """[("WFH", "Work From Home"), ...] -> ["WFH", ...] (skips the "" = all option)."""
+    return [value for value, _label in choices if value]
+
+
+def read_job_filters(query):
+    """The filters picked on the job results page, from the URL.
+
+    Unknown values are ignored, and an empty filter means "show all", e.g.
+    {"work_arrangement": ["WFH"], "locations": [], "working_hours": [], "industry": ""}
+    """
+    filters = {
+        name: [value for value in query.getlist(name) if value in choice_values(choices)]
+        for name, _label, choices in CHECKBOX_FILTERS
+    }
+    industry = query.get("industry", "")
+    filters["industry"] = industry if industry in choice_values(INDUSTRY_CHOICES) else ""
+    return filters
+
+
+def filter_bar(filters):
+    """The filter options for the template, with the picked ones marked."""
+    groups = [
+        {
+            "name": name,
+            "label": label,
+            "options": [
+                {"value": value, "label": text, "checked": value in filters[name]}
+                for value, text in choices
+            ],
+        }
+        for name, label, choices in CHECKBOX_FILTERS
+    ]
+    industries = [
+        {"value": value, "label": text, "selected": value == filters["industry"]}
+        for value, text in INDUSTRY_CHOICES
+    ]
+    return {"groups": groups, "industries": industries}

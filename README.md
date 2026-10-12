@@ -29,9 +29,15 @@ A Django web app that matches resumes and jobs using Google Gemini.
 **Both**
 
 - Drag-and-drop uploads, checked to be non-empty PDFs under the size limit.
-- `AI_MODE=mock` runs the whole app with fixed sample replies and no API key.
-- If Gemini is busy, the app retries and then tries a backup model. If the
-  AI still fails, the user sees a clear message instead of an error page.
+- **Everything depends on the AI.** There is no sample data or offline mode:
+  if Gemini can't process an upload, the user sees an error and can't reach
+  any results.
+- If Gemini is busy, the app retries and then tries a backup model. Replies
+  that aren't valid JSON or have the wrong structure are rejected and asked
+  for again.
+- **Same input, same output.** Gemini runs at temperature 0, and every
+  uploaded PDF is fingerprinted: uploading the same file (or the same set of
+  files) again returns the saved result instead of asking the AI again.
 
 ---
 
@@ -53,7 +59,7 @@ A Django web app that matches resumes and jobs using Google Gemini.
 |---|---|
 | `managers/io_manager.py` | Upload and filter forms, PDF checks |
 | `managers/ai_manager.py` | Sends prompts and PDFs to Gemini, retries, reads the JSON reply. No business logic. |
-| `managers/data_manager.py` | The only code that reads and writes `data/*.json`. Missing or broken files never crash the app. |
+| `managers/data_manager.py` | The only code that reads and writes `data/*.json`: saving, loading, the `find_record()` and `filter_records()` queries, and `load_all_records()` at startup. Missing or broken files never crash the app. |
 | `managers/logic_manager.py` | Scores and ranks candidates, ranks and filters jobs. Never calls the AI or reads files. |
 | `services/matching_service.py` | `read_resume()`, `match_jobs_to_resume()`, `match_candidates_to_job()` |
 
@@ -122,13 +128,12 @@ cp .env.example .env
 copy .env.example .env
 ```
 
-The defaults run the app in mock mode with sample results. To use the real
-AI, see [Mock vs live](#mock-vs-live).
+Then add your Gemini API key to `.env` — the app needs it for every upload.
+See [Gemini API key](#gemini-api-key).
 
 ### 6. Run the app
 
 ```bash
-python manage.py migrate   # sets up Django's own internal tables only
 python manage.py runserver
 ```
 
@@ -137,30 +142,50 @@ Open **http://127.0.0.1:8000/**.
 ### 7. Run the tests
 
 ```bash
-python manage.py test matcher
+python run_tests.py
 ```
 
-You should see `Ran 51 tests ... OK`. The tests never call the real AI.
+You should see `Ran 53 tests ... OK`. Every test is a plain function in
+`matcher/tests.py`; none of them call the real AI or touch `data/`.
 
 ---
 
-## Mock vs live
+## Run with Docker
 
-Two settings in `.env` control this. Restart `runserver` after changing them.
-
-| Setting | `mock` / `debug` (default) | `live` |
-|---|---|---|
-| `AI_MODE` | Fixed sample AI replies, no key needed | Real Gemini calls, needs `AI_API_KEY` |
-| `DATA_MODE` | Results pages show sample results from `dummy_data.py` | Results pages show the visitor's own saved results |
-
-For the full app, set both to `live` and add a free Gemini key from
-[Google AI Studio](https://aistudio.google.com/apikey):
+Docker runs the app the same way on any computer, with no Python setup.
+You need [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+running, and a `.env` file with your Gemini API key (see step 5 above).
 
 ```bash
-AI_MODE=live
-DATA_MODE=live
+docker compose up --build        # build and start, then open http://localhost:8000
+docker compose run --rm web python run_tests.py   # run the tests in the container
+docker compose down              # stop it (or press Ctrl+C)
+```
+
+How it is set up:
+
+- **`Dockerfile`** builds an image with Python 3.13, the packages in
+  `requirements.txt` and the code, and starts `runserver` on port 8000.
+- **`docker-compose.yml`** passes in your `.env` at run time, so the API key
+  is never built into the image, and shares your `data/` folder with the
+  container, so saved results survive restarts and rebuilds.
+- **`.dockerignore`** keeps `.env`, `data/`, `.venv/` and `.git/` out of the image.
+
+Run `docker compose up --build` again after pulling code changes.
+
+---
+
+## Gemini API key
+
+Get a free key from [Google AI Studio](https://aistudio.google.com/apikey)
+and put it in `.env`, then restart `runserver`:
+
+```bash
 AI_API_KEY=your-key-here
 ```
+
+Without a working key every upload fails with "The AI could not process
+your upload", and the results pages stay empty.
 
 On the free tier Gemini allows only a few requests per minute and a daily
 limit per model; check your usage at https://aistudio.google.com/usage.
@@ -181,17 +206,15 @@ avoid uploading real people's resumes you don't have permission to share.
 `.env` falls back to its default:
 
 ```python
-DATA_MODE = os.environ.get("DATA_MODE", "debug")
-#                          from .env ↑   default ↑
+MAX_JOBS = int(os.environ.get("MAX_JOBS", "15"))
+#                             from .env ↑  default ↑
 ```
 
 ### Available settings
 
 | Setting | Default | What it does |
 |---|---|---|
-| `AI_MODE` | `mock` | `mock` = sample AI replies, `live` = real Gemini calls |
-| `DATA_MODE` | `debug` | `debug` = sample results, `live` = the visitor's saved results |
-| `AI_API_KEY` | *(empty)* | Your Gemini API key (`GEMINI_API_KEY` also works) |
+| `AI_API_KEY` | *(empty)* | **Required.** Your Gemini API key (`GEMINI_API_KEY` also works) |
 | `AI_MODEL` | `gemini-3.8-flash` | Gemini model to use |
 | `AI_FALLBACK_MODELS` | `gemini-3.5-flash` | Backup models (comma-separated) tried if `AI_MODEL` is busy |
 | `MAX_UPLOAD_SIZE_MB` | `10` | Largest PDF users can upload |
@@ -226,7 +249,7 @@ theirs, so the results pages only show their own results. These files hold
 people's personal details, so they are listed in `.gitignore` and should be
 kept out of git.
 
-`db.sqlite3` is only used by Django itself, not for app data.
+The app doesn't use a database: sessions are signed cookies and data is JSON.
 
 ---
 
@@ -235,17 +258,20 @@ kept out of git.
 ```text
 INF1103_Group-3_Assgn1/
 ├── manage.py
+├── run_tests.py                    # Test script: python run_tests.py
 ├── requirements.txt
+├── Dockerfile                      # Image: Python + packages + code, runs runserver
+├── docker-compose.yml              # docker compose up: port 8000, .env, data/ volume
+├── .dockerignore                   # Keeps .env, data/ and .venv out of the image
 ├── .env.example
 ├── config/                         # Django settings, urls, wsgi
 ├── data/                           # Saved results (JSON)
 └── matcher/
     ├── views.py                    # Pages: handle the request, show messages
     ├── urls.py
-    ├── dummy_data.py               # Sample results for DATA_MODE=debug
     ├── context_processors.py       # Adds ?v= to CSS/JS links so browsers load new versions
     ├── models.py                   # Empty: no database models
-    ├── tests.py
+    ├── tests.py                    # Test functions, run by run_tests.py
     ├── managers/
     │   ├── io_manager.py           # Forms and upload checks
     │   ├── ai_manager.py           # Google Gemini calls

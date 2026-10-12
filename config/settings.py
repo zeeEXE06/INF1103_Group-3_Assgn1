@@ -30,7 +30,6 @@ ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").sp
 
 INSTALLED_APPS = [
     "django.contrib.staticfiles",
-    "django.contrib.sessions",
     "django.contrib.messages",
     "matcher",
 ]
@@ -80,6 +79,15 @@ TIME_ZONE = "Asia/Singapore"
 USE_I18N = True
 USE_TZ = True
 
+# Show the app's own log messages (AI fallbacks, rejected replies, records
+# loaded at startup) in the runserver terminal
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "loggers": {"matcher": {"handlers": ["console"], "level": "INFO"}},
+}
+
 # --- Static files ------------------------------------------------------------
 
 STATIC_URL = "static/"
@@ -88,10 +96,6 @@ STATICFILES_DIRS = [BASE_DIR / "matcher" / "static"]
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- Application-specific settings ------------------------------------------
-
-# "debug" = results pages show the sample data in dummy_data.py
-# "live"  = results pages show the visitor's own saved results
-DATA_MODE = os.environ.get("DATA_MODE", "debug")
 
 # Folder where the Data Manager saves its JSON files
 DATA_DIR = BASE_DIR / "data"
@@ -103,8 +107,7 @@ MAX_CANDIDATES = int(os.environ.get("MAX_CANDIDATES", "10"))
 # Most jobs suggested for one resume
 MAX_JOBS = int(os.environ.get("MAX_JOBS", "15"))
 
-# AI Manager: "mock" = fixed replies, no key needed; "live" = Google Gemini
-AI_MODE = os.environ.get("AI_MODE", "mock")
+# Google Gemini. The app needs a working key: every upload goes through the AI.
 # Free Gemini key from https://aistudio.google.com/apikey (GEMINI_API_KEY also works)
 AI_API_KEY = os.environ.get("AI_API_KEY") or os.environ.get("GEMINI_API_KEY", "")
 AI_MODEL = os.environ.get("AI_MODEL", "gemini-3.8-flash")

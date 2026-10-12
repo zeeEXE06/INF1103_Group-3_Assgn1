@@ -22,11 +22,28 @@ JOB_DEFAULTS = {
 }
 
 
-def get_field(job, name):
-    """Read a field from a saved job (dict) or a sample job (object)."""
-    if isinstance(job, dict):
-        return job.get(name, "")
-    return getattr(job, name, "")
+def to_score(value):
+    """Turn a match score into a whole number from 0 to 100 (0 if it isn't a number)."""
+    try:
+        return max(0, min(100, round(float(value))))
+    except (TypeError, ValueError):
+        return 0
+
+
+def select_top_jobs(jobs, max_jobs):
+    """Keep the best max_jobs jobs, one per link, best match first.
+
+    Jobs with the same url (e.g. the same title in different letter case)
+    count once - the first one is kept.
+    """
+    unique_jobs = []
+    seen_urls = set()
+    for job in jobs:
+        if job["url"] not in seen_urls:
+            seen_urls.add(job["url"])
+            unique_jobs.append(job)
+    ranked = sorted(unique_jobs, key=lambda job: job["match_score"], reverse=True)
+    return ranked[:max_jobs]
 
 
 def rank_jobs(jobs):
@@ -50,13 +67,13 @@ def filter_jobs(jobs, work_arrangements, locations, working_hours, industry):
     """
     filtered_jobs = []
     for job in jobs:
-        if work_arrangements and get_field(job, "work_arrangement") not in work_arrangements:
+        if work_arrangements and job.get("work_arrangement") not in work_arrangements:
             continue
-        if locations and get_field(job, "location") not in locations:
+        if locations and job.get("location") not in locations:
             continue
-        if working_hours and get_field(job, "working_hours") not in working_hours:
+        if working_hours and job.get("working_hours") not in working_hours:
             continue
-        if industry and get_field(job, "industry") != industry:
+        if industry and job.get("industry") != industry:
             continue
         filtered_jobs.append(job)
     return filtered_jobs
