@@ -1,8 +1,9 @@
 """
-Matching service - runs the AI Manager and Logic Manager together.
+Matching service - the three AI flows, built from the AI, Data and Logic Managers.
 
-Sprint 1-2: not built yet.
-Sprint 3/4: the views call one function here to get ranked results.
+    read_resume()             job seeker's resume PDF -> saved resume details
+    match_jobs_to_resume()    saved resume -> suggested jobs with Jobstreet links
+    match_candidates_to_job() job posting + resume PDFs -> scored candidates
 """
 
 import json
@@ -12,19 +13,124 @@ import re
 from django.conf import settings
 from django.utils import timezone
 
-from ..managers.ai_manager import ask_ai_text, ask_ai_with_pdfs, parse_json_reply
+from ..managers.ai_manager import ask_ai, ask_ai_text, ask_ai_with_pdfs, parse_json_reply
 from ..managers.data_manager import load_records, save_record
-from ..managers.logic_manager import calculate_score, is_strong_match
 from ..managers.io_manager import (
     INDUSTRY_CHOICES,
     LOCATION_CHOICES,
     WORK_ARRANGEMENT_CHOICES,
     WORKING_HOURS_CHOICES,
 )
+from ..managers.logic_manager import calculate_score, is_strong_match
 
 logger = logging.getLogger(__name__)
 
 JOBSTREET_BASE_URL = "https://sg.jobstreet.com"
+
+
+# ---------- Shared helpers ----------
+
+def choice_values(choices):
+    """[("WFH", "Work From Home"), ...] -> ["WFH", ...] (skips the "" = all option)."""
+    return [value for value, _label in choices if value]
+
+
+def filter_options():
+    """The filter values the AI must choose from, for the prompts."""
+    return {
+        "locations": ", ".join(choice_values(LOCATION_CHOICES)),
+        "work_arrangements": ", ".join(choice_values(WORK_ARRANGEMENT_CHOICES)),
+        "working_hours": ", ".join(choice_values(WORKING_HOURS_CHOICES)),
+        "industries": ", ".join(choice_values(INDUSTRY_CHOICES)),
+    }
+
+
+def pick(value, choices):
+    """Keep the AI's value only if it is one of the filter options, else ""."""
+    return value if value in choice_values(choices) else ""
+
+
+def to_score(value):
+    """Turn the AI's match_score into a whole number from 0 to 100."""
+    try:
+        return max(0, min(100, round(float(value))))
+    except (TypeError, ValueError):
+        return 0
+
+
+def as_list(value):
+    """Keep a list of non-empty strings, whatever the AI sent."""
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def now():
+    return timezone.now().isoformat(timespec="seconds")
+
+
+# ---------- Job seeker: read the resume ----------
+
+RESUME_PROMPT = """
+Analyze the uploaded resume and extract the candidate's education,
+experience and skills.
+
+- Education: degrees, diplomas, certificates, fields of study, schools, dates.
+- Experience: job titles, companies, dates of employment.
+- Skills: every skill mentioned.
+
+Return ONLY valid JSON in this format (use empty lists if nothing is found):
+
+{
+    "education": [
+        {
+            "qualification": "",
+            "institution": "",
+            "field_of_study": "",
+            "start_date": "",
+            "end_date": ""
+        }
+    ],
+    "experience": [
+        {
+            "job_title": "",
+            "company": "",
+            "start_date": "",
+            "end_date": ""
+        }
+    ],
+    "skills": [
+        {
+            "skill": ""
+        }
+    ]
+}
+
+Do not invent information that is not present in the resume.
+"""
+
+
+def read_resume(resume_file):
+    """Read a resume PDF with the AI and save its details.
+
+    Returns the saved record, e.g. {"id": "R001", "filename": ..., "skills": [...]}.
+    Raises ValueError if the AI reply is unreadable, and lets AI/API errors
+    through for the caller to handle.
+    """
+    resume_data = parse_json_reply(ask_ai(RESUME_PROMPT, resume_file))
+    if resume_data is None:
+        raise ValueError("AI resume reply is not valid JSON")
+
+    return save_record("resumes", {
+        "filename": resume_file.name,
+        "uploaded_at": now(),
+        "education": resume_data.get("education", []),
+        "experience": resume_data.get("experience", []),
+        "skills": resume_data.get("skills", []),
+    })
+
+
+# ---------- Job seeker: suggest jobs ----------
 
 JOB_TITLES_PROMPT = """
 You are a career advisor in Singapore. Suggest job titles that suit the
@@ -68,30 +174,9 @@ Return ONLY valid JSON in this format:
 
 
 def jobstreet_search_url(title):
-    """Jobstreet Singapore search page for a job title.
-
-    e.g. "Junior Python Developer" -> https://sg.jobstreet.com/junior-python-developer-jobs
-    """
+    """e.g. "Junior Python Developer" -> https://sg.jobstreet.com/junior-python-developer-jobs"""
     slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
     return f"{JOBSTREET_BASE_URL}/{slug}-jobs"
-
-
-def choice_values(choices):
-    """[("WFH", "Work From Home"), ...] -> ["WFH", ...] (skips the "" = all option)."""
-    return [value for value, _label in choices if value]
-
-
-def pick(value, choices):
-    """Keep the AI's value only if it is one of the filter options, else ""."""
-    return value if value in choice_values(choices) else ""
-
-
-def to_score(value):
-    """Turn the AI's match_score into a whole number from 0 to 100."""
-    try:
-        return max(0, min(100, round(float(value))))
-    except (TypeError, ValueError):
-        return 0
 
 
 def match_jobs_to_resume(resume_id=None):
@@ -103,7 +188,6 @@ def match_jobs_to_resume(resume_id=None):
     Raises ValueError if there is no resume or the AI reply is unreadable,
     and lets AI/API errors through for the caller to handle.
     """
-    # DATA: all resumes saved by the job seeker upload
     resumes = load_records("resumes")
     if resume_id is not None:
         resumes = [r for r in resumes if r.get("id") == resume_id]
@@ -118,18 +202,14 @@ def match_jobs_to_resume(resume_id=None):
             indent=2,
         ),
         max_jobs=max_jobs,
-        locations=", ".join(choice_values(LOCATION_CHOICES)),
-        work_arrangements=", ".join(choice_values(WORK_ARRANGEMENT_CHOICES)),
-        working_hours=", ".join(choice_values(WORKING_HOURS_CHOICES)),
-        industries=", ".join(choice_values(INDUSTRY_CHOICES)),
+        **filter_options(),
     )
 
     reply = parse_json_reply(ask_ai_text(prompt))
     if reply is None or not isinstance(reply.get("jobs"), list):
         raise ValueError("AI job title reply is not in the expected JSON format")
 
-    # DATA: suggested job titles with a Jobstreet search link, no duplicates,
-    # best match first, capped at MAX_JOBS
+    # One Jobstreet link per title, best match first, at most MAX_JOBS
     jobs = []
     seen_urls = set()
     for job in reply["jobs"]:
@@ -155,7 +235,7 @@ def match_jobs_to_resume(resume_id=None):
 
     return save_record("job_matches", {
         "resume_id": resume["id"],
-        "searched_at": timezone.now().isoformat(timespec="seconds"),
+        "searched_at": now(),
         "jobs": jobs,
     })
 
@@ -229,13 +309,6 @@ MATCH_FIELDS = (
 )
 
 
-def as_list(value):
-    """Keep a list of non-empty strings, whatever the AI sent."""
-    if not isinstance(value, list):
-        return []
-    return [str(item).strip() for item in value if str(item).strip()]
-
-
 def clean_candidate(ai_candidate, filename):
     """Turn one AI candidate into a saved candidate with its score."""
     candidate = {
@@ -284,10 +357,7 @@ def match_candidates_to_job(job_file, candidate_files):
     """
     prompt = CANDIDATE_COMPARISON_PROMPT.format(
         resume_count=len(candidate_files),
-        locations=", ".join(choice_values(LOCATION_CHOICES)),
-        work_arrangements=", ".join(choice_values(WORK_ARRANGEMENT_CHOICES)),
-        working_hours=", ".join(choice_values(WORKING_HOURS_CHOICES)),
-        industries=", ".join(choice_values(INDUSTRY_CHOICES)),
+        **filter_options(),
     )
     labelled_files = [("JOB POSTING", job_file)] + [
         (f"RESUME {number}", resume_file)
@@ -298,7 +368,7 @@ def match_candidates_to_job(job_file, candidate_files):
     if reply is None or not isinstance(reply.get("candidates"), list):
         raise ValueError("AI comparison reply is not in the expected JSON format")
 
-    # DATA: AI candidates by resume number, so each one is matched to its file
+    # Match each AI candidate back to its file by resume number
     by_number = {}
     for ai_candidate in reply["candidates"]:
         if isinstance(ai_candidate, dict):
@@ -329,7 +399,7 @@ def match_candidates_to_job(job_file, candidate_files):
     }
 
     return save_record("candidate_matches", {
-        "created_at": timezone.now().isoformat(timespec="seconds"),
+        "created_at": now(),
         "job": job,
         "candidates": candidates,
     })

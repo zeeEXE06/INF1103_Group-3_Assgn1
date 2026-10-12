@@ -1,9 +1,5 @@
 """
-I/O Manager - handles all user input and output.
-
-Sprint 1: checks the uploaded files and form inputs before they reach the views.
-Sprint 2: pass the checked data on to the Data Manager to be saved.
-Sprint 3/4: format the results from the Logic Manager for display.
+I/O Manager - the upload and filter forms, and the checks on what users submit.
 """
 
 from django import forms
@@ -52,7 +48,6 @@ def validate_candidate_files(candidate_files):
 class JobPostingForm(forms.Form):
     """Employer uploads the job description PDF."""
 
-    # DATA: job description PDF (to be saved in Sprint 2)
     job_file = forms.FileField(
         label="Job Description (PDF)",
         widget=forms.ClearableFileInput(attrs={"accept": ".pdf"}),
@@ -69,7 +64,6 @@ class JobPostingForm(forms.Form):
 class ResumeUploadForm(forms.Form):
     """Job seeker uploads their resume."""
 
-    # DATA: resume PDF (to be saved in Sprint 2)
     resume_file = forms.FileField(
         label="Your Resume (PDF)",
         widget=forms.ClearableFileInput(attrs={"accept": ".pdf"}),
@@ -83,8 +77,8 @@ class ResumeUploadForm(forms.Form):
 
 # ---------- Job results filters ----------
 
-# Filter options on the job results page.
-# The values match what's stored on each job (e.g. job.location == "Central").
+# Filter options on the job results page. The AI is told to use these same
+# values, so they match what's saved on each job (e.g. location "Central").
 WORK_ARRANGEMENT_CHOICES = [
     ("WFH", "Work From Home"),
     ("Hybrid", "Hybrid"),
@@ -124,36 +118,27 @@ INDUSTRY_CHOICES = [
 class JobFilterForm(forms.Form):
     """Filters on the job results page. All optional - nothing ticked = show all."""
 
-    # DATA: work arrangements to show, e.g. ["WFH", "Hybrid"]
     work_arrangement = forms.MultipleChoiceField(
         label="Work Arrangement",
         choices=WORK_ARRANGEMENT_CHOICES,
         widget=forms.CheckboxSelectMultiple,
         required=False,
     )
-    # DATA: locations to show, e.g. ["North", "Central"]
     locations = forms.MultipleChoiceField(
         label="Location(s)",
         choices=LOCATION_CHOICES,
         widget=forms.CheckboxSelectMultiple,
         required=False,
     )
-    # DATA: working hours to show, e.g. ["Flexible"]
     working_hours = forms.MultipleChoiceField(
         label="Working Hours",
         choices=WORKING_HOURS_CHOICES,
         widget=forms.CheckboxSelectMultiple,
         required=False,
     )
-    # DATA: industry to show, e.g. "Technology / IT" ("" = all)
     industry = forms.ChoiceField(
         label="Industry",
         choices=INDUSTRY_CHOICES,
         widget=forms.Select,
         required=False,
     )
-
-
-# ---------- Output ----------
-
-# TODO (Sprint 3/4): add functions to format results and error messages for display
