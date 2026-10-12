@@ -16,7 +16,16 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from google.genai import errors
 
-from .managers.ai_manager import ask_ai, generate, generate_json, get_client, parse_json_reply
+from .managers.ai_manager import (
+    comparison_schema_problem,
+    extract_resume,
+    generate,
+    get_client,
+    jobs_schema_problem,
+    parse_json_reply,
+    request_json,
+    resume_schema_problem,
+)
 from .managers.data_manager import load_records, save_record
 from .managers.logic_manager import (
     calculate_score,
@@ -123,14 +132,13 @@ class EmployerWorkflowTests(TempDataDirMixin, TestCase):
 
     @override_settings(DATA_MODE="live")
     def test_failed_ai_call_shows_error_and_stays_on_page(self):
-        with patch("matcher.views.match_candidates_to_job", side_effect=RuntimeError("503")):
-            with self.assertLogs("matcher.views", level="ERROR"):
-                response = self.client.post(
-                    reverse("matcher:employer_upload"),
-                    {"job_file": make_pdf_file("job.pdf"), "candidate_files": [make_pdf_file("c1.pdf")]},
-                )
+        with patch("matcher.views.match_candidates_to_job", side_effect=ValueError("AI failed")):
+            response = self.client.post(
+                reverse("matcher:employer_upload"),
+                {"job_file": make_pdf_file("job.pdf"), "candidate_files": [make_pdf_file("c1.pdf")]},
+            )
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "The AI service is unavailable")
+        self.assertContains(response, "The AI could not process your upload")
 
     @override_settings(DATA_MODE="debug")
     def test_results_page_shows_ranked_candidates(self):
@@ -163,25 +171,14 @@ class JobSeekerWorkflowTests(TempDataDirMixin, TestCase):
         self.assertEqual(records[0]["filename"], "resume.pdf")
         self.assertIn({"skill": "Python"}, records[0]["skills"])
 
-    def test_unreadable_ai_reply_shows_error_and_saves_nothing(self):
-        with patch("matcher.services.matching_service.ask_ai", return_value="Sorry, I can't help."):
+    def test_failed_ai_shows_error_and_saves_nothing(self):
+        with patch("matcher.services.matching_service.extract_resume", return_value=None):
             response = self.client.post(
                 reverse("matcher:job_seeker_upload"),
                 {"resume_file": make_pdf_file("resume.pdf")},
             )
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Could not read the resume")
-        self.assertEqual(load_records("resumes"), [])
-
-    def test_failed_ai_call_shows_error_and_saves_nothing(self):
-        with patch("matcher.services.matching_service.ask_ai", side_effect=RuntimeError("401 Unauthorized")):
-            with self.assertLogs("matcher.views", level="ERROR"):
-                response = self.client.post(
-                    reverse("matcher:job_seeker_upload"),
-                    {"resume_file": make_pdf_file("resume.pdf")},
-                )
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "The AI service is unavailable")
+        self.assertContains(response, "The AI could not process your upload")
         self.assertEqual(load_records("resumes"), [])
 
     def test_missing_resume_reshows_form_with_errors(self):
@@ -248,7 +245,7 @@ class JobFilterTests(TestCase):
 class AIManagerTests(TestCase):
     @override_settings(AI_MODE="mock")
     def test_mock_mode_returns_reply_without_api_key(self):
-        reply = parse_json_reply(ask_ai("test prompt", make_pdf_file()))
+        reply = extract_resume(make_pdf_file())
         self.assertEqual(set(reply), {"education", "experience", "skills"})
 
     @override_settings(AI_MODE="live", AI_API_KEY="test", AI_MODEL="main", AI_FALLBACK_MODELS=["backup"])
@@ -275,11 +272,35 @@ class AIManagerTests(TestCase):
         self.assertEqual(client.models.generate_content.call_count, 1)
 
     @override_settings(AI_MODE="live", AI_API_KEY="test")
-    def test_broken_json_reply_is_asked_again(self):
-        with patch("matcher.managers.ai_manager.generate", side_effect=['{"broken', '{"ok": true}']) as gen:
+    def test_broken_or_wrong_shape_reply_is_asked_again(self):
+        good = '{"jobs": [{"title": "Dev"}]}'
+        for bad in ('{"broken', '{"jobs": "none"}'):
+            with patch("matcher.managers.ai_manager.generate", side_effect=[bad, good]) as gen:
+                with self.assertLogs("matcher.managers.ai_manager", level="WARNING"):
+                    reply = request_json(lambda: "hi", jobs_schema_problem, "")
+            self.assertEqual(reply, {"jobs": [{"title": "Dev"}]})
+            self.assertEqual(gen.call_count, 2)
+
+    @override_settings(AI_MODE="live", AI_API_KEY="test")
+    def test_gives_up_after_repeated_wrong_shape(self):
+        with patch("matcher.managers.ai_manager.generate", return_value='{"jobs": "none"}') as gen:
             with self.assertLogs("matcher.managers.ai_manager", level="WARNING"):
-                self.assertEqual(generate_json("hi", None), '{"ok": true}')
+                self.assertIsNone(request_json(lambda: "hi", jobs_schema_problem, ""))
         self.assertEqual(gen.call_count, 2)
+
+    @override_settings(AI_MODE="live", AI_API_KEY="")
+    def test_api_failure_is_logged_and_returns_none(self):
+        with self.assertLogs("matcher.managers.ai_manager", level="ERROR"):
+            self.assertIsNone(extract_resume(make_pdf_file()))
+
+    def test_schema_checks(self):
+        self.assertIsNone(resume_schema_problem({"education": [], "experience": [{}], "skills": []}))
+        self.assertIsNotNone(resume_schema_problem({"education": [], "skills": []}))
+        self.assertIsNotNone(resume_schema_problem({"education": ["BSc"], "experience": [], "skills": []}))
+        self.assertIsNotNone(jobs_schema_problem({"jobs": [{"title": 5}]}))
+        self.assertIsNone(comparison_schema_problem({"job": {}, "candidates": [{"resume_number": 1}]}))
+        self.assertIsNotNone(comparison_schema_problem({"job": {}, "candidates": [{"resume_number": "1"}]}))
+        self.assertIsNotNone(comparison_schema_problem({"candidates": []}))
 
     def test_parse_json_reply_strips_code_fences(self):
         reply = '```json\n{"skills": [{"skill": "SQL"}]}\n```'
@@ -327,7 +348,7 @@ class JobSearchTests(TempDataDirMixin, TestCase):
             {"title": "Low", "match_score": "40", "location": "Mars", "work_arrangement": "WFH"},
             {"title": "High", "match_score": 150, "industry": "Technology / IT"},
         ]})
-        with patch("matcher.services.matching_service.ask_ai_text", return_value=reply):
+        with patch("matcher.services.matching_service.suggest_jobs", return_value=json.loads(reply)):
             record = match_jobs_to_resume()
         high, low = record["jobs"]
         self.assertEqual((high["title"], high["match_score"]), ("High", 100))
@@ -352,7 +373,7 @@ class JobSearchTests(TempDataDirMixin, TestCase):
             {"title": "C++ / Embedded Engineer"},
             {"title": "Data Analyst"},
         ]})
-        with patch("matcher.services.matching_service.ask_ai_text", return_value=reply):
+        with patch("matcher.services.matching_service.suggest_jobs", return_value=json.loads(reply)):
             record = match_jobs_to_resume()
         self.assertEqual([job["url"] for job in record["jobs"]], [
             "https://sg.jobstreet.com/junior-python-developer-jobs",
@@ -364,13 +385,12 @@ class JobSearchTests(TempDataDirMixin, TestCase):
             match_jobs_to_resume()
 
     def test_failed_job_search_still_saves_resume(self):
-        with patch("matcher.views.match_jobs_to_resume", side_effect=RuntimeError("boom")):
-            with self.assertLogs("matcher.views", level="ERROR"):
-                response = self.client.post(
-                    reverse("matcher:job_seeker_upload"),
-                    {"resume_file": make_pdf_file("resume.pdf")},
-                    follow=True,
-                )
+        with patch("matcher.views.match_jobs_to_resume", side_effect=ValueError("AI failed")):
+            response = self.client.post(
+                reverse("matcher:job_seeker_upload"),
+                {"resume_file": make_pdf_file("resume.pdf")},
+                follow=True,
+            )
         self.assertContains(response, "the job search failed")
         self.assertEqual(len(load_records("resumes")), 1)
 
@@ -405,8 +425,8 @@ class JobSuggestionResultsTests(TempDataDirMixin, TestCase):
 
     def test_changing_filters_does_not_call_the_ai(self):
         self.upload_resume()
-        with patch("matcher.services.matching_service.ask_ai_text") as ai_text, \
-                patch("matcher.services.matching_service.ask_ai") as ai_pdf:
+        with patch("matcher.services.matching_service.suggest_jobs") as ai_text, \
+                patch("matcher.services.matching_service.extract_resume") as ai_pdf:
             self.client.get(reverse("matcher:job_results"), {"locations": ["Central"]})
             self.client.get(reverse("matcher:job_results"), {"industry": "Technology / IT"})
         ai_text.assert_not_called()
@@ -490,11 +510,11 @@ class CandidateScoringTests(TestCase):
 @override_settings(AI_MODE="mock")
 class CandidateMatchingServiceTests(TempDataDirMixin, TestCase):
     def test_missing_ai_result_becomes_unreadable_candidate(self):
-        reply = json.dumps({"job": {"title": "Dev"}, "candidates": [
+        reply = {"job": {"title": "Dev"}, "candidates": [
             {"resume_number": 1, "name": "Ann", "matched_skills": ["Python"], "missing_skills": [],
              "experience_match": True, "location_match": True},
-        ]})
-        with patch("matcher.services.matching_service.ask_ai_with_pdfs", return_value=reply):
+        ]}
+        with patch("matcher.services.matching_service.compare_candidates", return_value=reply):
             with self.assertLogs("matcher.services.matching_service", level="WARNING"):
                 record = match_candidates_to_job(
                     make_pdf_file("job.pdf"), [make_pdf_file("ann.pdf"), make_pdf_file("bad.pdf")],
@@ -505,8 +525,7 @@ class CandidateMatchingServiceTests(TempDataDirMixin, TestCase):
         self.assertEqual(bad["filename"], "bad.pdf")
         self.assertEqual(load_records("candidate_matches"), [record])
 
-    def test_unreadable_ai_reply_raises(self):
-        with patch("matcher.services.matching_service.ask_ai_with_pdfs", return_value="sorry"):
-            with self.assertLogs("matcher.managers.ai_manager", level="WARNING"):
-                with self.assertRaises(ValueError):
-                    match_candidates_to_job(make_pdf_file("job.pdf"), [make_pdf_file("a.pdf")])
+    def test_failed_ai_raises(self):
+        with patch("matcher.services.matching_service.compare_candidates", return_value=None):
+            with self.assertRaises(ValueError):
+                match_candidates_to_job(make_pdf_file("job.pdf"), [make_pdf_file("a.pdf")])

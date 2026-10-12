@@ -5,8 +5,6 @@ DATA_MODE=debug shows the sample results from dummy_data.py; DATA_MODE=live
 shows the visitor's own saved results.
 """
 
-import logging
-
 from django.conf import settings
 from django.contrib import messages
 from django.shortcuts import redirect, render
@@ -22,9 +20,7 @@ from .managers.io_manager import (
 from .managers.logic_manager import filter_jobs, rank_candidates, rank_jobs
 from .services.matching_service import match_candidates_to_job, match_jobs_to_resume, read_resume
 
-logger = logging.getLogger(__name__)
-
-AI_UNAVAILABLE = "The AI service is unavailable right now. Please try again later."
+AI_FAILED = "The AI could not process your upload right now. Please try again later."
 
 
 def is_live_mode():
@@ -57,12 +53,7 @@ def employer_upload(request):
             try:
                 candidate_match = match_candidates_to_job(job_file, candidate_files)
             except ValueError:
-                logger.exception("AI comparison reply could not be read")
-                messages.error(request, "Could not compare the resumes. Please try again.")
-            except Exception:
-                # Bad/missing API key, network down, rate limit, files too large, etc.
-                logger.exception("AI comparison failed")
-                messages.error(request, AI_UNAVAILABLE)
+                messages.error(request, AI_FAILED)
             else:
                 # Remember this employer's result so the results page shows theirs only
                 request.session["candidate_match_id"] = candidate_match["id"]
@@ -106,19 +97,12 @@ def job_seeker_upload(request):
             try:
                 resume = read_resume(resume_file)
             except ValueError:
-                messages.error(request, "Could not read the resume. Please try again.")
-                return render(request, "matcher/job_seeker.html")
-            except Exception:
-                # Bad/missing API key, network down, rate limit, etc.
-                logger.exception("AI call failed for %s", resume_file.name)
-                messages.error(request, AI_UNAVAILABLE)
+                messages.error(request, AI_FAILED)
                 return render(request, "matcher/job_seeker.html")
 
             try:
                 job_match = match_jobs_to_resume(resume["id"])
-            except Exception:
-                # The resume is already saved, so still continue to the results page
-                logger.exception("Job search failed for resume %s", resume["id"])
+            except ValueError:
                 messages.warning(
                     request,
                     "Resume received, but the job search failed. Please try again later.",
