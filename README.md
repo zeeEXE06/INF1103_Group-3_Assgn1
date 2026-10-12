@@ -150,6 +150,31 @@ You should see `Ran 53 tests ... OK`. Every test is a plain function in
 
 ---
 
+## Run with Docker
+
+Docker runs the app the same way on any computer, with no Python setup.
+You need [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+running, and a `.env` file with your Gemini API key (see step 5 above).
+
+```bash
+docker compose up --build        # build and start, then open http://localhost:8000
+docker compose run --rm web python run_tests.py   # run the tests in the container
+docker compose down              # stop it (or press Ctrl+C)
+```
+
+How it is set up:
+
+- **`Dockerfile`** builds an image with Python 3.13, the packages in
+  `requirements.txt` and the code, and starts `runserver` on port 8000.
+- **`docker-compose.yml`** passes in your `.env` at run time, so the API key
+  is never built into the image, and shares your `data/` folder with the
+  container, so saved results survive restarts and rebuilds.
+- **`.dockerignore`** keeps `.env`, `data/`, `.venv/` and `.git/` out of the image.
+
+Run `docker compose up --build` again after pulling code changes.
+
+---
+
 ## Gemini API key
 
 Get a free key from [Google AI Studio](https://aistudio.google.com/apikey)
@@ -235,6 +260,9 @@ INF1103_Group-3_Assgn1/
 ├── manage.py
 ├── run_tests.py                    # Test script: python run_tests.py
 ├── requirements.txt
+├── Dockerfile                      # Image: Python + packages + code, runs runserver
+├── docker-compose.yml              # docker compose up: port 8000, .env, data/ volume
+├── .dockerignore                   # Keeps .env, data/ and .venv out of the image
 ├── .env.example
 ├── config/                         # Django settings, urls, wsgi
 ├── data/                           # Saved results (JSON)

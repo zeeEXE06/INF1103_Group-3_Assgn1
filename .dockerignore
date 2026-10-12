@@ -1,0 +1,20 @@
+# Secrets - the API key is passed in at run time (see docker-compose.yml)
+.env
+
+# Saved results hold people's personal details - mounted as a volume instead
+data/
+
+# Local environment and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+db.sqlite3
+
+# Not needed to run the app
+.git/
+.gitignore
+.vscode/
+.idea/
+.DS_Store
+*.pdf
