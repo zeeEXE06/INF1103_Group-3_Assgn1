@@ -5,6 +5,7 @@ can't be used until a subclass fills in every abstract method.
 
 from ..contracts.ai import AIProvider, AIProviderError, AITask
 from ..contracts.data import RecordRepository
+from ..contracts.scoring import ScoreComponent
 from .test_app import raises
 
 
@@ -107,3 +108,38 @@ def test_repository_loads_everything_at_startup():
     everything = repository.load_everything()
     assert sorted(everything) == ["job_matches", "resumes"]
     assert len(everything["resumes"]) == 1
+
+
+# ---------- Scoring contract ----------
+
+class ShareOfSkills(ScoreComponent):
+    """Test component: the share of skills a candidate has."""
+
+    name = "skills"
+
+    def fraction(self, candidate):
+        return candidate["share"]
+
+
+def test_score_component_contract_cannot_be_created_directly():
+    assert raises(TypeError, ScoreComponent, 10)
+
+
+def test_score_component_points_are_weight_times_fraction():
+    component = ShareOfSkills(40)
+    assert component.weight == 40
+    assert component.points({"share": 0.5}) == 20
+    assert component.points({"share": 1.0}) == 40
+
+
+def test_score_component_points_stay_between_0_and_weight():
+    component = ShareOfSkills(40)
+    assert component.points({"share": 1.5}) == 40
+    assert component.points({"share": -0.5}) == 0
+
+
+def test_score_component_rejects_bad_weights():
+    assert raises(ValueError, ShareOfSkills, -1)
+    assert raises(ValueError, ShareOfSkills, "40")
+    assert raises(ValueError, ShareOfSkills, True)
+    assert ShareOfSkills(0).points({"share": 1.0}) == 0
