@@ -4,6 +4,7 @@ can't be used until a subclass fills in every abstract method.
 """
 
 from ..contracts.ai import AIProvider, AIProviderError, AITask
+from ..contracts.data import RecordRepository
 from .test_app import raises
 
 
@@ -50,3 +51,59 @@ def test_any_task_runs_through_any_provider():
 
 def test_provider_error_is_an_exception():
     assert issubclass(AIProviderError, Exception)
+
+
+# ---------- Data contract ----------
+
+class DictRepository(RecordRepository):
+    """The smallest repository: only load, save and collection_names."""
+
+    def __init__(self):
+        self._collections = {}
+
+    def load(self, collection):
+        return list(self._collections.get(collection, []))
+
+    def save(self, collection, record):
+        records = self._collections.setdefault(collection, [])
+        record = {"id": f"{collection[0].upper()}{len(records) + 1:03d}", **record}
+        records.append(record)
+        return record
+
+    def collection_names(self):
+        return sorted(self._collections)
+
+
+def test_repository_contract_cannot_be_created_directly():
+    assert raises(TypeError, RecordRepository)
+
+
+def test_repository_subclass_gets_find_and_filter_for_free():
+    repository = DictRepository()
+    first = repository.save("resumes", {"filename": "a.pdf", "file_hash": "x"})
+    repository.save("resumes", {"filename": "b.pdf", "file_hash": "y"})
+
+    assert repository.find("resumes", first["id"]) == first
+    assert repository.find("resumes", "R999") is None
+    assert repository.find("resumes", "") is None
+    assert [r["filename"] for r in repository.filter("resumes", file_hash="y")] == ["b.pdf"]
+    assert repository.filter("resumes", file_hash="z") == []
+
+
+def test_repository_newest_returns_the_last_match():
+    repository = DictRepository()
+    repository.save("job_matches", {"resume_id": "R001", "max_jobs": 5})
+    newer = repository.save("job_matches", {"resume_id": "R001", "max_jobs": 5})
+
+    assert repository.newest("job_matches", resume_id="R001") == newer
+    assert repository.newest("job_matches", resume_id="R002") is None
+
+
+def test_repository_loads_everything_at_startup():
+    repository = DictRepository()
+    repository.save("resumes", {"filename": "a.pdf"})
+    repository.save("job_matches", {"resume_id": "R001"})
+
+    everything = repository.load_everything()
+    assert sorted(everything) == ["job_matches", "resumes"]
+    assert len(everything["resumes"]) == 1
