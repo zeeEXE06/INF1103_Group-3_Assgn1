@@ -265,14 +265,23 @@ INF1103_Group-3_Assgn1/
 ├── docker-compose.yml              # docker compose up: port 8000, .env, data/ volume
 ├── .dockerignore                   # Keeps .env, data/ and .venv out of the image
 ├── .env.example
+├── .github/workflows/ci.yml        # CI: runs the tests, and the tests inside Docker
 ├── config/                         # Django settings, urls, wsgi
 ├── data/                           # Saved results (JSON)
+├── docs/
+│   └── class-diagram.md            # Phase 2 class diagram (Mermaid)
 └── matcher/
     ├── views.py                    # Pages: handle the request, show messages
     ├── urls.py
     ├── context_processors.py       # Adds ?v= to CSS/JS links so browsers load new versions
     ├── models.py                   # Empty: no database models
     ├── tests/                      # Test functions (test_*.py), run by run_tests.py
+    ├── contracts/                  # Abstract base classes the managers build on
+    │   ├── ai.py                   # AIProvider, AITask
+    │   ├── data.py                 # RecordRepository
+    │   └── scoring.py              # ScoreComponent
+    ├── domain/                     # Resume, JobSuggestion, JobPosting, Candidate,
+    │                               # MatchResult, JobStatus
     ├── managers/
     │   ├── io_manager.py           # Forms and upload checks
     │   ├── ai_manager.py           # Google Gemini calls
