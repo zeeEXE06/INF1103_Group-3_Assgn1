@@ -1,5 +1,5 @@
 """
-Tests for the Resume & Job Matcher. Run them with:
+Tests for the whole app: pages, the AI flows and each manager. Run them with:
 
     python run_tests.py
 
@@ -19,7 +19,7 @@ from django.test import Client, override_settings
 from django.urls import reverse
 from google.genai import errors
 
-from .managers.ai_manager import (
+from ..managers.ai_manager import (
     comparison_schema_problem,
     extract_resume,
     generate,
@@ -29,8 +29,8 @@ from .managers.ai_manager import (
     request_json,
     resume_schema_problem,
 )
-from .managers.data_manager import filter_records, find_record, load_all_records, load_records, save_record
-from .managers.logic_manager import (
+from ..managers.data_manager import filter_records, find_record, load_all_records, load_records, save_record
+from ..managers.logic_manager import (
     calculate_score,
     filter_jobs,
     is_strong_match,
@@ -39,7 +39,7 @@ from .managers.logic_manager import (
     select_top_jobs,
     to_score,
 )
-from .services.matching_service import match_candidates_to_job, match_jobs_to_resume
+from ..services.matching_service import match_candidates_to_job, match_jobs_to_resume
 
 
 # ---------- Fake Gemini replies ----------
