@@ -3,8 +3,10 @@ Tests for the domain classes in matcher/domain: each one keeps its data
 safe from outside changes and converts to and from saved records.
 """
 
+from ..domain.candidate import Candidate, MatchResult
 from ..domain.job import JobPosting, JobSuggestion
 from ..domain.resume import Resume
+from .test_app import raises
 
 
 # ---------- Resume ----------
@@ -112,3 +114,67 @@ def test_job_posting_round_trips_through_a_saved_record():
 def test_job_posting_drops_blank_required_skills():
     posting = JobPosting("job.pdf", required_skills=["Python", "", "  ", "SQL"])
     assert posting.required_skills == ["Python", "SQL"]
+
+
+# ---------- Candidate and MatchResult ----------
+
+SAVED_CANDIDATE = {
+    "filename": "alice.pdf",
+    "name": "Alice Tan",
+    "matched_skills": ["Python", "Django"],
+    "missing_skills": ["SQL"],
+    "experience": ["Developer, 2 years"],
+    "education": ["B.Sc. Computer Science"],
+    "location": "Central",
+    "work_arrangement": "Hybrid",
+    "working_hours": "Standard",
+    "summary": "Good fit.",
+    "unreadable": False,
+    "experience_match": True,
+    "education_match": True,
+    "location_match": True,
+    "work_arrangement_match": False,
+    "working_hours_match": True,
+    "match_score": 82,
+    "strong_match": False,
+}
+
+
+def test_match_result_round_trips_through_a_saved_record():
+    assert MatchResult.from_dict(SAVED_CANDIDATE).to_dict() == SAVED_CANDIDATE
+
+
+def test_candidate_skills_ratio():
+    assert Candidate.from_dict(SAVED_CANDIDATE).skills_ratio == 2 / 3
+    assert Candidate("a.pdf").skills_ratio == 0.0
+
+
+def test_candidate_without_a_name_uses_the_filename():
+    assert Candidate("bob.pdf", name="  ").name == "bob.pdf"
+
+
+def test_unreadable_resume_placeholder():
+    candidate = Candidate.unreadable_resume("broken.pdf")
+    assert candidate.unreadable and candidate.name == "broken.pdf"
+    assert not any(getattr(candidate, field) for field in Candidate.MATCH_FIELDS)
+    assert candidate.summary == "Could not read this resume."
+
+
+def test_candidate_cannot_be_changed_from_outside():
+    candidate = Candidate.from_dict(SAVED_CANDIDATE)
+    candidate.matched_skills.append("Java")
+    assert raises(AttributeError, setattr, candidate, "location_match", False)
+    assert candidate.matched_skills == ["Python", "Django"] and candidate.location_match
+
+
+def test_match_result_shares_its_candidate():
+    candidate = Candidate.from_dict(SAVED_CANDIDATE)
+    first, second = MatchResult(candidate, 82, False), MatchResult(candidate, 60, False)
+    assert first.candidate is second.candidate is candidate
+
+
+def test_match_result_rejects_bad_scores():
+    candidate = Candidate("a.pdf")
+    for score in (-1, 101, 50.5, "80", True):
+        assert raises(ValueError, MatchResult, candidate, score, False)
+    assert MatchResult(candidate, 0, False).score == 0

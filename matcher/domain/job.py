@@ -2,10 +2,7 @@
 Jobs - a job title suggested to a job seeker, and an employer's job posting.
 """
 
-
-def _strings(values):
-    """A copy of a list of strings, without blanks."""
-    return [str(value).strip() for value in values if str(value).strip()]
+from .text import clean_strings
 
 
 class JobSuggestion:
@@ -23,7 +20,7 @@ class JobSuggestion:
         self._work_arrangement = work_arrangement
         self._working_hours = working_hours
         self._industry = industry
-        self._matched_skills = _strings(matched_skills)
+        self._matched_skills = clean_strings(matched_skills)
         self._match_reason = match_reason
 
     @staticmethod
@@ -107,7 +104,7 @@ class JobPosting:
         self._filename = filename
         self._title = title
         self._company = company
-        self._required_skills = _strings(required_skills)
+        self._required_skills = clean_strings(required_skills)
         self._location = location
         self._work_arrangement = work_arrangement
         self._working_hours = working_hours
