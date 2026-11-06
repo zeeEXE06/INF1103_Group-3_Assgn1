@@ -281,7 +281,7 @@ INF1103_Group-3_Assgn1/
     │   ├── data.py                 # RecordRepository
     │   └── scoring.py              # ScoreComponent
     ├── domain/                     # Resume, JobSuggestion, JobPosting, Candidate,
-    │                               # MatchResult, JobStatus
+    │                               # MatchResult
     ├── managers/
     │   ├── io_manager.py           # Forms and upload checks
     │   ├── ai_manager.py           # Google Gemini calls

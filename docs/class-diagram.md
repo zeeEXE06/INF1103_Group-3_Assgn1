@@ -129,15 +129,6 @@ classDiagram
         -_strong_match
         +to_dict() dict
     }
-    class JobStatus {
-        <<enumeration>>
-        PENDING
-        RUNNING
-        DONE
-        FAILED
-        +is_finished
-        +can_move_to(status) bool
-    }
     MatchResult --> Candidate : association
     CandidateScorer ..> MatchResult : creates
 
