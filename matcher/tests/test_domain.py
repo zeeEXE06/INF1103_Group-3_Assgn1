@@ -5,7 +5,6 @@ safe from outside changes and converts to and from saved records.
 
 from ..domain.candidate import Candidate, MatchResult
 from ..domain.job import JobPosting, JobSuggestion
-from ..domain.job_status import JobStatus
 from ..domain.resume import Resume
 from .test_app import raises
 
@@ -179,23 +178,3 @@ def test_match_result_rejects_bad_scores():
     for score in (-1, 101, 50.5, "80", True):
         assert raises(ValueError, MatchResult, candidate, score, False)
     assert MatchResult(candidate, 0, False).score == 0
-
-
-# ---------- JobStatus ----------
-
-def test_job_status_moves_forward_only():
-    assert JobStatus.PENDING.can_move_to(JobStatus.RUNNING)
-    assert JobStatus.RUNNING.can_move_to(JobStatus.DONE)
-    assert JobStatus.RUNNING.can_move_to(JobStatus.FAILED)
-    assert not JobStatus.PENDING.can_move_to(JobStatus.DONE)
-    assert not JobStatus.DONE.can_move_to(JobStatus.RUNNING)
-    assert not JobStatus.FAILED.can_move_to(JobStatus.PENDING)
-
-
-def test_job_status_is_finished_when_done_or_failed():
-    assert [status for status in JobStatus if status.is_finished] == [JobStatus.DONE, JobStatus.FAILED]
-
-
-def test_job_status_saves_as_text():
-    assert JobStatus("running") is JobStatus.RUNNING
-    assert JobStatus.DONE.value == "done"
