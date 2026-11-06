@@ -1,6 +1,7 @@
 """
 Tests for the AI providers. No test calls the real Gemini: the client is
-replaced with a MagicMock that returns fixed replies or errors.
+replaced with a MagicMock that returns fixed replies or errors, and
+FakeProvider stands in for Gemini in the other tests.
 """
 
 from unittest.mock import MagicMock, patch
@@ -10,6 +11,7 @@ from google.genai import errors, types
 
 from ..contracts.ai import AIProviderError
 from ..managers.ai_providers import GeminiProvider
+from .fakes import FakeProvider
 from .test_app import make_pdf_file, raises
 
 
@@ -104,3 +106,47 @@ def test_gemini_asks_for_json_at_temperature_0():
 
     config = client.models.generate_content.call_args.kwargs["config"]
     assert config.response_mime_type == "application/json" and config.temperature == 0
+
+
+# ---------- FakeProvider ----------
+
+def test_fake_provider_replies_in_order():
+    provider = FakeProvider("first", "second")
+    assert provider.generate(["a"]) == "first"
+    assert provider.generate(["b"]) == "second"
+    assert provider.calls == [["a"], ["b"]] and provider.call_count == 2
+
+
+def test_fake_provider_raises_error_replies():
+    provider = FakeProvider(AIProviderError("down"), "ok")
+    assert raises(AIProviderError, provider.generate, ["a"])
+    assert provider.generate(["a"]) == "ok"
+
+
+def test_fake_provider_with_no_replies_left_acts_like_an_unreachable_ai():
+    provider = FakeProvider()
+    assert raises(AIProviderError, provider.generate, ["a"])
+    assert provider.call_count == 1
+
+
+def test_fake_provider_keeps_its_own_copy_of_the_calls():
+    contents = ["a"]
+    provider = FakeProvider("ok")
+    provider.generate(contents)
+    contents.append("b")
+    provider.calls[0].append("c")
+    assert provider.calls == [["a"]]
+
+
+# ---------- Both providers keep the AIProvider contract ----------
+
+def check_keeps_the_contract(provider):
+    """What every AIProvider must do: text reply for good contents, AIProviderError on failure."""
+    assert provider.generate(["hi"]) == "ok"
+    assert raises(AIProviderError, provider.generate, ["hi"])
+
+
+def test_gemini_and_fake_provider_can_replace_each_other():
+    check_keeps_the_contract(FakeProvider("ok", AIProviderError("down")))
+    with using(fake_client("ok", ConnectionError("down"))):
+        check_keeps_the_contract(gemini())
