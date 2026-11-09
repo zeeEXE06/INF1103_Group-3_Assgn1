@@ -3,6 +3,7 @@ I/O Manager - reads and checks what users submit, and prepares the filter
 options shown on the job results page.
 
     UploadValidator  checks uploaded PDFs before they reach the AI
+    JobFilterForm    the filters on the job results page
 """
 
 from django.conf import settings
@@ -166,6 +167,71 @@ def read_employer_upload(request):
 
 
 # ---------- Job results filters ----------
+
+class JobFilterForm:
+    """The filters picked on the job results page.
+
+    Only known values are kept, and an empty filter means "show all", e.g.
+    {"work_arrangement": ["WFH"], "locations": [], "working_hours": [], "industry": ""}
+    """
+
+    # The checkbox filters: (name in the URL, label, choices)
+    CHECKBOX_FILTERS = [
+        ("work_arrangement", "Work Arrangement", WORK_ARRANGEMENT_CHOICES),
+        ("locations", "Location(s)", LOCATION_CHOICES),
+        ("working_hours", "Working Hours", WORKING_HOURS_CHOICES),
+    ]
+
+    def __init__(self, work_arrangement=(), locations=(), working_hours=(), industry=""):
+        picked = {"work_arrangement": work_arrangement, "locations": locations, "working_hours": working_hours}
+        self._filters = {
+            name: [value for value in picked[name] if value in self.choice_values(choices)]
+            for name, _label, choices in self.CHECKBOX_FILTERS
+        }
+        self._filters["industry"] = industry if industry in self.choice_values(INDUSTRY_CHOICES) else ""
+
+    @classmethod
+    def from_query(cls, query):
+        """Read the filters from the URL, e.g. ?locations=West&locations=East."""
+        return cls(
+            **{name: query.getlist(name) for name, _label, _choices in cls.CHECKBOX_FILTERS},
+            industry=query.get("industry", ""),
+        )
+
+    @staticmethod
+    def choice_values(choices):
+        """[("WFH", "Work From Home"), ...] -> ["WFH", ...] (skips the "" = all option)."""
+        return [value for value, _label in choices if value]
+
+    @property
+    def filters(self):
+        """The picked values, e.g. {"locations": ["West"], ..., "industry": ""}."""
+        return {name: list(value) if isinstance(value, list) else value for name, value in self._filters.items()}
+
+    @property
+    def is_empty(self):
+        """True if nothing is picked, so every job is shown."""
+        return not any(self._filters.values())
+
+    def filter_bar(self):
+        """The filter options for the template, with the picked ones marked."""
+        groups = [
+            {
+                "name": name,
+                "label": label,
+                "options": [
+                    {"value": value, "label": text, "checked": value in self._filters[name]}
+                    for value, text in choices
+                ],
+            }
+            for name, label, choices in self.CHECKBOX_FILTERS
+        ]
+        industries = [
+            {"value": value, "label": text, "selected": value == self._filters["industry"]}
+            for value, text in INDUSTRY_CHOICES
+        ]
+        return {"groups": groups, "industries": industries}
+
 
 def choice_values(choices):
     """[("WFH", "Work From Home"), ...] -> ["WFH", ...] (skips the "" = all option)."""
