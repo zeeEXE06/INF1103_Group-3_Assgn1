@@ -82,13 +82,28 @@ classDiagram
         -_components : list~ScoreComponent~
         +score(candidate) MatchResult
     }
-    class StrongMatchRule
-    class JobRanker
-    class JobFilter
+    class StrongMatchRule {
+        -_min_skills_ratio
+        +is_met(candidate) bool
+    }
+    class CandidateRanker {
+        +rank(results) list
+    }
+    class JobRanker {
+        +rank(jobs) list
+        +select_top(jobs, max_jobs) list
+    }
+    class JobFilter {
+        +matches(job) bool
+        +apply(jobs) list
+    }
     ScoreComponent <|-- SkillsComponent
     ScoreComponent <|-- MatchFlagComponent
     CandidateScorer *-- ScoreComponent : composition
     CandidateScorer --> StrongMatchRule
+    CandidateRanker ..> MatchResult : orders
+    JobRanker ..> JobSuggestion : orders
+    JobFilter ..> JobSuggestion : filters
 
     %% ---------- IO Manager (P2: Li Wei) ----------
     class UploadValidator
