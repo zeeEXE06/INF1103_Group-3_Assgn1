@@ -5,9 +5,12 @@ rule, and ranking and filtering. They use domain objects only - no AI, no files.
 
 from ..contracts.scoring import ScoreComponent
 from ..domain.candidate import Candidate, MatchResult
+from ..domain.job import JobSuggestion
 from ..managers.logic_manager import (
     CandidateRanker,
     CandidateScorer,
+    JobFilter,
+    JobRanker,
     MatchFlagComponent,
     SkillsComponent,
     StrongMatchRule,
@@ -122,3 +125,45 @@ def test_rank_candidates_best_first_and_unreadable_last():
     high = scorer.score(make_candidate(**FULL_MATCH))
     unreadable = scorer.score(Candidate.unreadable_resume("broken.pdf"))
     assert CandidateRanker().rank([unreadable, low, high]) == [high, low, unreadable]
+
+
+# ---------- JobRanker ----------
+
+def job(title, score=0, url=None, **fields):
+    return JobSuggestion(title, url or f"/{title.lower()}", match_score=score, **fields)
+
+
+def titles(jobs):
+    return [j.title for j in jobs]
+
+
+def test_rank_jobs_best_match_first():
+    assert titles(JobRanker().rank([job("B", 50), job("A", 90), job("C", 50)])) == ["A", "B", "C"]
+
+
+def test_select_top_jobs_removes_duplicate_links_sorts_and_caps():
+    jobs = [job("A", 50, "/a"), job("a", 99, "/a"), job("B", 80), job("C", 70)]
+    assert titles(JobRanker().select_top(jobs, 2)) == ["B", "C"]
+    assert titles(JobRanker().select_top(jobs, 10)) == ["B", "C", "A"]
+
+
+# ---------- JobFilter ----------
+
+JOBS = [
+    job("A", location="West", work_arrangement="On-site", working_hours="Standard", industry="Manufacturing"),
+    job("B", location="Central", work_arrangement="Hybrid", working_hours="Standard", industry="Technology / IT"),
+]
+
+
+def test_no_filters_keeps_every_job():
+    assert titles(JobFilter().apply(JOBS)) == ["A", "B"]
+
+
+def test_filters_combine():
+    assert titles(JobFilter(locations=["West"]).apply(JOBS)) == ["A"]
+    assert titles(JobFilter(["Hybrid"], [], ["Standard"], "Technology / IT").apply(JOBS)) == ["B"]
+    assert titles(JobFilter(locations=["West"], industry="Technology / IT").apply(JOBS)) == []
+
+
+def test_filter_allows_any_of_several_ticked_values():
+    assert titles(JobFilter(locations=["West", "Central"]).apply(JOBS)) == ["A", "B"]

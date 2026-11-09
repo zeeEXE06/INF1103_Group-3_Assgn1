@@ -8,6 +8,7 @@ It never calls the AI or reads files.
     StrongMatchRule                      decides the Strong Match label
     CandidateScorer                      scores a candidate (owns its components)
     CandidateRanker                      puts scored candidates in order
+    JobRanker, JobFilter                 rank and filter suggested jobs
 """
 
 from ..contracts.scoring import ScoreComponent
@@ -128,6 +129,54 @@ class CandidateRanker:
 
 
 # ---------- Job seeker: rank and filter jobs ----------
+
+class JobRanker:
+    """Puts suggested jobs (JobSuggestions) in order, best match first."""
+
+    def rank(self, jobs):
+        """Best match_score first; jobs with equal scores keep their order."""
+        return sorted(jobs, key=lambda job: job.match_score, reverse=True)
+
+    def select_top(self, jobs, max_jobs):
+        """Keep the best max_jobs jobs, one per link, best match first.
+
+        Jobs with the same url (e.g. the same title in different letter case)
+        count once - the first one is kept.
+        """
+        unique_jobs, seen_urls = [], set()
+        for job in jobs:
+            if job.url not in seen_urls:
+                seen_urls.add(job.url)
+                unique_jobs.append(job)
+        return self.rank(unique_jobs)[:max_jobs]
+
+
+class JobFilter:
+    """The filters picked on the job results page.
+
+    Works on saved jobs, so changing filters never needs another AI call.
+    An empty filter (nothing ticked, or "" for industry) means "show all".
+    """
+
+    def __init__(self, work_arrangements=(), locations=(), working_hours=(), industry=""):
+        self._work_arrangements = set(work_arrangements)
+        self._locations = set(locations)
+        self._working_hours = set(working_hours)
+        self._industry = industry
+
+    def matches(self, job):
+        """True if a JobSuggestion passes every filter that is set."""
+        return (
+            (not self._work_arrangements or job.work_arrangement in self._work_arrangements)
+            and (not self._locations or job.location in self._locations)
+            and (not self._working_hours or job.working_hours in self._working_hours)
+            and (not self._industry or job.industry == self._industry)
+        )
+
+    def apply(self, jobs):
+        """The jobs that pass every filter, in the same order."""
+        return [job for job in jobs if self.matches(job)]
+
 
 # Fields every job on the results page has, with defaults for older saved
 # records that are missing some of them

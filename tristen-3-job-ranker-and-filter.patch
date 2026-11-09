@@ -1,0 +1,130 @@
+diff --git a/matcher/managers/logic_manager.py b/matcher/managers/logic_manager.py
+index a39bd92..ed55226 100644
+--- a/matcher/managers/logic_manager.py
++++ b/matcher/managers/logic_manager.py
+@@ -8,6 +8,7 @@ It never calls the AI or reads files.
+     StrongMatchRule                      decides the Strong Match label
+     CandidateScorer                      scores a candidate (owns its components)
+     CandidateRanker                      puts scored candidates in order
++    JobRanker, JobFilter                 rank and filter suggested jobs
+ """
+ 
+ from ..contracts.scoring import ScoreComponent
+@@ -129,6 +130,54 @@ class CandidateRanker:
+ 
+ # ---------- Job seeker: rank and filter jobs ----------
+ 
++class JobRanker:
++    """Puts suggested jobs (JobSuggestions) in order, best match first."""
++
++    def rank(self, jobs):
++        """Best match_score first; jobs with equal scores keep their order."""
++        return sorted(jobs, key=lambda job: job.match_score, reverse=True)
++
++    def select_top(self, jobs, max_jobs):
++        """Keep the best max_jobs jobs, one per link, best match first.
++
++        Jobs with the same url (e.g. the same title in different letter case)
++        count once - the first one is kept.
++        """
++        unique_jobs, seen_urls = [], set()
++        for job in jobs:
++            if job.url not in seen_urls:
++                seen_urls.add(job.url)
++                unique_jobs.append(job)
++        return self.rank(unique_jobs)[:max_jobs]
++
++
++class JobFilter:
++    """The filters picked on the job results page.
++
++    Works on saved jobs, so changing filters never needs another AI call.
++    An empty filter (nothing ticked, or "" for industry) means "show all".
++    """
++
++    def __init__(self, work_arrangements=(), locations=(), working_hours=(), industry=""):
++        self._work_arrangements = set(work_arrangements)
++        self._locations = set(locations)
++        self._working_hours = set(working_hours)
++        self._industry = industry
++
++    def matches(self, job):
++        """True if a JobSuggestion passes every filter that is set."""
++        return (
++            (not self._work_arrangements or job.work_arrangement in self._work_arrangements)
++            and (not self._locations or job.location in self._locations)
++            and (not self._working_hours or job.working_hours in self._working_hours)
++            and (not self._industry or job.industry == self._industry)
++        )
++
++    def apply(self, jobs):
++        """The jobs that pass every filter, in the same order."""
++        return [job for job in jobs if self.matches(job)]
++
++
+ # Fields every job on the results page has, with defaults for older saved
+ # records that are missing some of them
+ JOB_DEFAULTS = {
+diff --git a/matcher/tests/test_logic.py b/matcher/tests/test_logic.py
+index afbb783..362ffb4 100644
+--- a/matcher/tests/test_logic.py
++++ b/matcher/tests/test_logic.py
+@@ -5,9 +5,12 @@ rule, and ranking and filtering. They use domain objects only - no AI, no files.
+ 
+ from ..contracts.scoring import ScoreComponent
+ from ..domain.candidate import Candidate, MatchResult
++from ..domain.job import JobSuggestion
+ from ..managers.logic_manager import (
+     CandidateRanker,
+     CandidateScorer,
++    JobFilter,
++    JobRanker,
+     MatchFlagComponent,
+     SkillsComponent,
+     StrongMatchRule,
+@@ -122,3 +125,45 @@ def test_rank_candidates_best_first_and_unreadable_last():
+     high = scorer.score(make_candidate(**FULL_MATCH))
+     unreadable = scorer.score(Candidate.unreadable_resume("broken.pdf"))
+     assert CandidateRanker().rank([unreadable, low, high]) == [high, low, unreadable]
++
++
++# ---------- JobRanker ----------
++
++def job(title, score=0, url=None, **fields):
++    return JobSuggestion(title, url or f"/{title.lower()}", match_score=score, **fields)
++
++
++def titles(jobs):
++    return [j.title for j in jobs]
++
++
++def test_rank_jobs_best_match_first():
++    assert titles(JobRanker().rank([job("B", 50), job("A", 90), job("C", 50)])) == ["A", "B", "C"]
++
++
++def test_select_top_jobs_removes_duplicate_links_sorts_and_caps():
++    jobs = [job("A", 50, "/a"), job("a", 99, "/a"), job("B", 80), job("C", 70)]
++    assert titles(JobRanker().select_top(jobs, 2)) == ["B", "C"]
++    assert titles(JobRanker().select_top(jobs, 10)) == ["B", "C", "A"]
++
++
++# ---------- JobFilter ----------
++
++JOBS = [
++    job("A", location="West", work_arrangement="On-site", working_hours="Standard", industry="Manufacturing"),
++    job("B", location="Central", work_arrangement="Hybrid", working_hours="Standard", industry="Technology / IT"),
++]
++
++
++def test_no_filters_keeps_every_job():
++    assert titles(JobFilter().apply(JOBS)) == ["A", "B"]
++
++
++def test_filters_combine():
++    assert titles(JobFilter(locations=["West"]).apply(JOBS)) == ["A"]
++    assert titles(JobFilter(["Hybrid"], [], ["Standard"], "Technology / IT").apply(JOBS)) == ["B"]
++    assert titles(JobFilter(locations=["West"], industry="Technology / IT").apply(JOBS)) == []
++
++
++def test_filter_allows_any_of_several_ticked_values():
++    assert titles(JobFilter(locations=["West", "Central"]).apply(JOBS)) == ["A", "B"]
