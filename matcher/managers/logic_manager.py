@@ -6,10 +6,12 @@ It never calls the AI or reads files.
     SkillsComponent, MatchFlagComponent  the weighted parts of a candidate's
                                          score (ScoreComponent subclasses)
     StrongMatchRule                      decides the Strong Match label
+    CandidateScorer                      scores a candidate (owns its components)
+    CandidateRanker                      puts scored candidates in order
 """
 
 from ..contracts.scoring import ScoreComponent
-from ..domain.candidate import Candidate
+from ..domain.candidate import Candidate, MatchResult
 
 
 # ---------- Employer: the parts of a candidate's score ----------
@@ -64,6 +66,64 @@ class StrongMatchRule:
             candidate.skills_ratio >= self._min_skills_ratio
             and candidate.experience_match
             and candidate.location_match
+        )
+
+
+
+class CandidateScorer:
+    """Scores candidates out of 100 and labels Strong Matches.
+
+    The scorer creates its own score components from the weights and owns
+    them (composition): they exist only inside this scorer. Every component
+    is used the same way - points(candidate) - so the scorer never checks
+    which kind it has.
+    """
+
+    # How much each part counts towards a candidate's score (adds up to 100)
+    DEFAULT_WEIGHTS = {
+        "skills": 40,
+        "experience": 25,
+        "education": 10,
+        "location": 10,
+        "work_arrangement": 10,
+        "working_hours": 5,
+    }
+
+    def __init__(self, weights=None, strong_match_rule=None):
+        weights = dict(self.DEFAULT_WEIGHTS if weights is None else weights)
+        if set(weights) != set(self.DEFAULT_WEIGHTS):
+            raise ValueError(f"Weights must be given for exactly {sorted(self.DEFAULT_WEIGHTS)}")
+        if sum(weights.values()) != 100:
+            raise ValueError(f"Weights must add up to 100, not {sum(weights.values())}")
+
+        self._components = [SkillsComponent(weights["skills"])] + [
+            MatchFlagComponent(f"{part}_match", weights[part])
+            for part in self.DEFAULT_WEIGHTS if part != "skills"
+        ]
+        self._strong_match_rule = strong_match_rule or StrongMatchRule()
+
+    @property
+    def weights(self):
+        """e.g. {"skills": 40, "experience": 25, ...}"""
+        return {component.name: component.weight for component in self._components}
+
+    def score(self, candidate):
+        """Return a MatchResult: the candidate with its score and Strong Match label."""
+        if candidate.unreadable:
+            return MatchResult(candidate, 0, False)
+        total = round(sum(component.points(candidate) for component in self._components))
+        return MatchResult(candidate, total, self._strong_match_rule.is_met(candidate))
+
+
+class CandidateRanker:
+    """Puts scored candidates in order: best score first, unreadable resumes last."""
+
+    def rank(self, results):
+        """results: MatchResults. Returns a new list, best first."""
+        return sorted(
+            results,
+            key=lambda result: (not result.candidate.unreadable, result.score),
+            reverse=True,
         )
 
 
