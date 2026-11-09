@@ -2,7 +2,69 @@
 Logic Manager - ranks and filters jobs, and scores and ranks candidates.
 
 It never calls the AI or reads files.
+
+    SkillsComponent, MatchFlagComponent  the weighted parts of a candidate's
+                                         score (ScoreComponent subclasses)
+    StrongMatchRule                      decides the Strong Match label
 """
+
+from ..contracts.scoring import ScoreComponent
+from ..domain.candidate import Candidate
+
+
+# ---------- Employer: the parts of a candidate's score ----------
+
+class SkillsComponent(ScoreComponent):
+    """Points for the share of the job's skills the candidate has."""
+
+    name = "skills"
+
+    def fraction(self, candidate):
+        return candidate.skills_ratio
+
+
+class MatchFlagComponent(ScoreComponent):
+    """Full points if one of the AI's true/false checks is true, none if false.
+
+    e.g. MatchFlagComponent("experience_match", 25)
+    """
+
+    def __init__(self, field, weight):
+        if field not in Candidate.MATCH_FIELDS:
+            raise ValueError(f"{field!r} is not one of {Candidate.MATCH_FIELDS}")
+        super().__init__(weight)
+        self._field = field
+
+    @property
+    def name(self):
+        """e.g. "experience" for experience_match."""
+        return self._field.removesuffix("_match")
+
+    def fraction(self, candidate):
+        return 1.0 if getattr(candidate, self._field) else 0.0
+
+
+class StrongMatchRule:
+    """Strong Match = skills >= 70% AND experience match AND location match.
+
+    Uses three fields of the AI's reply, so one good field alone is not enough.
+    """
+
+    def __init__(self, min_skills_ratio=0.7):
+        if not 0 <= min_skills_ratio <= 1:
+            raise ValueError(f"min_skills_ratio must be from 0 to 1, not {min_skills_ratio!r}")
+        self._min_skills_ratio = min_skills_ratio
+
+    @property
+    def min_skills_ratio(self):
+        return self._min_skills_ratio
+
+    def is_met(self, candidate):
+        return (
+            candidate.skills_ratio >= self._min_skills_ratio
+            and candidate.experience_match
+            and candidate.location_match
+        )
 
 
 # ---------- Job seeker: rank and filter jobs ----------
