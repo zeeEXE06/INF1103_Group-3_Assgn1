@@ -2,11 +2,13 @@
 Tests for the IO Manager's classes: checking uploads and reading the job
 filters. They work on uploaded files and URL values, without loading pages.
 """
+from io import BytesIO
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 from django.http import QueryDict
 from django.utils.datastructures import MultiValueDict
+from pypdf import PdfWriter
 
 from ..managers.io_manager import JobFilterForm, UploadValidator
 from .test_app import make_pdf_file
@@ -16,6 +18,13 @@ def uploads(**files):
     """Like request.FILES: one file per name, or a list for multi-file inputs."""
     return MultiValueDict({name: f if isinstance(f, list) else [f] for name, f in files.items()})
 
+def create_valid_pdf():
+    """Create a valid PDF in memory for testing."""
+    buffer = BytesIO()
+    writer = PdfWriter()
+    writer.add_blank_page(width=612, height=792)
+    writer.write(buffer)
+    return buffer.getvalue()
 
 # ---------- UploadValidator: one file ----------
 
@@ -70,6 +79,54 @@ def test_valid_employer_upload_has_no_errors():
     *_, job_errors, candidate_errors = UploadValidator().check_employer_upload(files)
     assert job_errors == [] and candidate_errors == []
 
+def test_pdf_filename_with_non_pdf_content_is_rejected():
+    uploaded_file = SimpleUploadedFile(
+        "fake.pdf",
+        b"This is just a text file, not a PDF."
+    )
+
+    error = UploadValidator().check_pdf(uploaded_file)
+
+    assert error == "'fake.pdf' is not a valid or readable PDF file."
+
+
+def test_corrupted_pdf_is_rejected():
+    uploaded_file = SimpleUploadedFile(
+        "corrupted.pdf",
+        b"%PDF-1.4 corrupted content"
+    )
+
+    error = UploadValidator().check_pdf(uploaded_file)
+
+    assert error == "'corrupted.pdf' is not a valid or readable PDF file."
+
+
+def test_valid_pdf_content_is_accepted():
+    uploaded_file = SimpleUploadedFile(
+        "valid.pdf",
+        create_valid_pdf(),
+        content_type="application/pdf"
+    )
+
+    assert UploadValidator().check_pdf(uploaded_file) is None
+
+def test_password_protected_pdf_is_rejected():
+    buffer = BytesIO()
+    writer = PdfWriter()
+    writer.add_blank_page(width=612, height=792)
+    writer.encrypt("testpassword")
+
+    writer.write(buffer)
+
+    uploaded_file = SimpleUploadedFile(
+        "protected.pdf",
+        buffer.getvalue(),
+        content_type="application/pdf"
+    )
+
+    error = UploadValidator().check_pdf(uploaded_file)
+
+    assert error == "'protected.pdf' is password-protected and cannot be processed."
 
 # ---------- JobFilterForm ----------
 

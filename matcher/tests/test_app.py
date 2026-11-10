@@ -18,6 +18,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, override_settings
 from django.urls import reverse
 from google.genai import errors
+from pypdf import PdfWriter
 
 from ..managers.ai_manager import (
     comparison_schema_problem,
@@ -96,9 +97,24 @@ def fake_gemini(*replies):
 
 # ---------- Helpers ----------
 
-def make_pdf_file(name="resume.pdf", content=b"%PDF-1.4 fake pdf content"):
-    return SimpleUploadedFile(name, content, content_type="application/pdf")
+def make_pdf_file(name="resume.pdf", content=None):
+    if content is not None:
+        return SimpleUploadedFile(
+            name,
+            content,
+            content_type="application/pdf"
+        )
 
+    buffer = io.BytesIO()
+    writer = PdfWriter()
+    writer.add_blank_page(width=72, height=72)
+    writer.write(buffer)
+
+    return SimpleUploadedFile(
+        name,
+        buffer.getvalue(),
+        content_type="application/pdf"
+    )
 
 def text(response):
     return response.content.decode()
@@ -395,14 +411,35 @@ def test_same_resume_gives_same_results_without_asking_the_ai_again():
     assert shown_results(second) == shown_results(first)
     assert len(load_records("resumes")) == 1 and len(load_records("job_matches")) == 1
 
-
 def test_different_resume_is_sent_to_the_ai():
     uploaded_client()
-    other = SimpleUploadedFile("other.pdf", b"%PDF-1.4 another resume", content_type="application/pdf")
+
+    # Create another valid PDF with different file contents
+    buffer = io.BytesIO()
+    writer = PdfWriter()
+    writer.add_blank_page(width=72, height=72)
+    writer.add_metadata({
+        "/Title": "Different Resume",
+        "/Author": "Different Candidate",
+    })
+    writer.write(buffer)
+
+    other = SimpleUploadedFile(
+        "other.pdf",
+        buffer.getvalue(),
+        content_type="application/pdf"
+    )
+
     with fake_gemini(RESUME_REPLY, JOBS_REPLY) as gemini:
-        Client().post(reverse("matcher:job_seeker_upload"), {"resume_file": other})
+        response = Client().post(
+            reverse("matcher:job_seeker_upload"),
+            {"resume_file": other}
+        )
+
+    assert response.status_code == 302
     assert gemini.call_count == 2
     assert len(load_records("resumes")) == 2
+    assert len(load_records("job_matches")) == 2
 
 
 def test_same_employer_files_give_same_ranking_without_asking_the_ai_again():

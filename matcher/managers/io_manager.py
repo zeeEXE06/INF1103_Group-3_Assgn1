@@ -7,6 +7,7 @@ options shown on the job results page.
 """
 
 from django.conf import settings
+from pypdf import PdfReader
 
 
 # ---------- Filter options ----------
@@ -79,6 +80,22 @@ class UploadValidator:
             return f"'{uploaded_file.name}' is larger than the {self._max_size_mb}MB limit."
         if uploaded_file.size == 0:
             return f"'{uploaded_file.name}' is empty."
+        try: #read and validate acutal pdf content
+            uploaded_file.seek(0)
+            reader = PdfReader(uploaded_file, strict=True)
+            if reader.is_encrypted: #reject password-protected pdfs
+                return f"'{uploaded_file.name}' is password-protected and cannot be processed."
+            if len(reader.pages) == 0: #check pdf got at least 1 page
+                return f"'{uploaded_file.name}' does not contain any pages."
+            for page in reader.pages:
+                _ = page.mediabox
+                contents = page.get_contents()
+                if contents is not None:
+                    contents.get_data()
+        except Exception:
+            return f"'{uploaded_file.name}' is not a valid or readable PDF file."
+        finally:
+            uploaded_file.seek(0) #reset file pointer for AI processing
         return None
 
     def check_resume_upload(self, files):
