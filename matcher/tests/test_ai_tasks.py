@@ -5,7 +5,7 @@ rejects replies that don't have the structure it asked for.
 
 from ..contracts.ai import AITask
 from ..domain.resume import Resume
-from ..managers.ai_tasks import JobSuggestionTask, ResumeExtractionTask
+from ..managers.ai_tasks import CandidateComparisonTask, JobSuggestionTask, ResumeExtractionTask
 from .test_app import make_pdf_file
 
 OPTIONS = {
@@ -77,3 +77,34 @@ def test_job_task_keeps_its_own_copy_of_the_options():
     task = JobSuggestionTask(Resume("r.pdf", "abc"), 5, options)
     options["locations"] = "Mars"
     assert "Mars" not in task.build_contents()[0]
+
+
+# ---------- CandidateComparisonTask ----------
+
+def comparison_task(*resume_names):
+    resumes = [make_pdf_file(name) for name in resume_names]
+    return CandidateComparisonTask(make_pdf_file("job.pdf"), resumes, OPTIONS), resumes
+
+
+def test_comparison_task_sends_the_job_then_each_numbered_resume():
+    task, resumes = comparison_task("alice.pdf", "bob.pdf")
+    prompt, *files = task.build_contents()
+    assert "2 resume PDFs" in prompt and "RESUME 1 to RESUME 2" in prompt
+    assert files[0] == "JOB POSTING (job.pdf):" and files[1].name == "job.pdf"
+    assert files[2:] == ["RESUME 1 (alice.pdf):", resumes[0], "RESUME 2 (bob.pdf):", resumes[1]]
+
+
+def test_comparison_task_schema():
+    task, _ = comparison_task("alice.pdf")
+    assert task.schema_problem({"job": {}, "candidates": [{"resume_number": 1}]}) is None
+    assert task.schema_problem({"candidates": []}) == '"job" is not an object'
+    assert task.schema_problem({"job": {}, "candidates": {}}) == '"candidates" is not a list'
+    for number in ("1", 1.0, True, None):
+        reply = {"job": {}, "candidates": [{"resume_number": number}]}
+        assert task.schema_problem(reply) == 'every candidate needs a whole-number "resume_number"'
+
+
+def test_every_task_is_an_ai_task():
+    task, _ = comparison_task("alice.pdf")
+    for each in (ResumeExtractionTask(make_pdf_file()), job_task(), task):
+        assert isinstance(each, AITask) and each.name and each.build_contents()
