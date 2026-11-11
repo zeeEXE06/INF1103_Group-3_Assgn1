@@ -52,3 +52,12 @@ class AITask(ABC):
         Returns a short description of the first problem found, e.g.
         '"skills" is not a list', or None if the reply is valid.
         """
+
+    @staticmethod
+    def _list_of_dicts_problem(data, key):
+        """Shared check for subclasses: a problem if data[key] isn't a list of objects, else None."""
+        if not isinstance(data.get(key), list):
+            return f'"{key}" is not a list'
+        if not all(isinstance(item, dict) for item in data[key]):
+            return f'"{key}" must only contain objects'
+        return None
