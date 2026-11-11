@@ -31,7 +31,7 @@ from ..managers.logic_manager import (
     select_top_jobs,
     to_score,
 )
-from ..services.matching_service import match_candidates_to_job, match_jobs_to_resume
+from ..services.matching_service import MatchingError, MatchingService, match_candidates_to_job, match_jobs_to_resume
 from .fakes import FakeProvider
 
 
@@ -211,7 +211,7 @@ def test_employer_results_are_ranked_with_strong_match():
 
 
 def test_employer_ai_failure_shows_error_and_stays_on_page():
-    with patch("matcher.views.match_candidates_to_job", side_effect=ValueError("AI failed")):
+    with patch.object(MatchingService, "match_candidates_to_job", side_effect=MatchingError("AI failed")):
         response = upload_employer_files(Client(), ["c1.pdf"])
     assert response.status_code == 200
     assert "The AI could not process your upload" in text(response)
@@ -270,7 +270,7 @@ def test_job_seeker_ai_failure_shows_error_and_saves_nothing():
 
 def test_failed_job_search_still_saves_resume():
     with fake_gemini(RESUME_REPLY), \
-            patch("matcher.views.match_jobs_to_resume", side_effect=ValueError("AI failed")):
+            patch.object(MatchingService, "match_jobs_to_resume", side_effect=MatchingError("AI failed")):
         response = upload_resume(Client(), follow=True)
     assert "the job search failed" in text(response)
     assert len(load_records("resumes")) == 1
