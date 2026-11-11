@@ -1,0 +1,14 @@
+# Start the app:      docker compose up --build      then open http://localhost:8000
+# Run the tests:      docker compose run --rm web python run_tests.py
+# Stop it:            Ctrl+C, or docker compose down
+
+services:
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    # Your settings and Gemini API key, read from your own .env (never built into the image)
+    env_file: .env
+    # Keep saved results on your computer, so they survive restarts and rebuilds
+    volumes:
+      - ./data:/app/data
