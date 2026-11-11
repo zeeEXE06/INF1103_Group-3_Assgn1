@@ -1,0 +1,40 @@
+# CI - runs the tests on every push and pull request.
+#
+#   tests:   runs python run_tests.py on Python 3.13
+#   docker:  builds the image and runs the same tests inside the container
+#
+# Neither job needs a Gemini API key: no test calls the real AI.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run the tests
+        run: python run_tests.py
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: docker build -t resume-matcher .
+
+      - name: Run the tests in the container
+        run: docker run --rm resume-matcher python run_tests.py
