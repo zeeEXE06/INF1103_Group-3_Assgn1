@@ -168,6 +168,25 @@ class JobFilterForm:
         """[("WFH", "Work From Home"), ...] -> ["WFH", ...] (skips the "" = all option)."""
         return [value for value, _label in choices if value]
 
+    @classmethod
+    def options_for_ai(cls):
+        """The values the AI must choose from, e.g. {"locations": "North, South, ..."}.
+
+        The AI is given the same values the filters use, so every saved job
+        can be filtered.
+        """
+        return {
+            "locations": ", ".join(cls.choice_values(LOCATION_CHOICES)),
+            "work_arrangements": ", ".join(cls.choice_values(WORK_ARRANGEMENT_CHOICES)),
+            "working_hours": ", ".join(cls.choice_values(WORKING_HOURS_CHOICES)),
+            "industries": ", ".join(cls.choice_values(INDUSTRY_CHOICES)),
+        }
+
+    @classmethod
+    def allowed_value(cls, value, choices):
+        """Keep a value from the AI only if it is one of the filter options, else ""."""
+        return value if value in cls.choice_values(choices) else ""
+
     @property
     def filters(self):
         """The picked values, e.g. {"locations": ["West"], ..., "industry": ""}."""
