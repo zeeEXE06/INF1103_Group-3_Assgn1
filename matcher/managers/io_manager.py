@@ -215,30 +215,3 @@ class JobFilterForm:
             for value, text in INDUSTRY_CHOICES
         ]
         return {"groups": groups, "industries": industries}
-
-
-# ---------- Used by the views and matching service until they become classes (P3) ----------
-
-def read_resume_upload(request):
-    """Job seeker's upload. Returns (resume_file, errors)."""
-    return UploadValidator().check_resume_upload(request.FILES)
-
-
-def read_employer_upload(request):
-    """Employer's upload. Returns (job_file, candidate_files, job_errors, candidate_errors)."""
-    return UploadValidator().check_employer_upload(request.FILES)
-
-
-def choice_values(choices):
-    """[("WFH", "Work From Home"), ...] -> ["WFH", ...] (skips the "" = all option)."""
-    return JobFilterForm.choice_values(choices)
-
-
-def read_job_filters(query):
-    """The filters picked on the job results page, from the URL (see JobFilterForm)."""
-    return JobFilterForm.from_query(query).filters
-
-
-def filter_bar(filters):
-    """The filter options for the template, with the picked ones marked."""
-    return JobFilterForm(**filters).filter_bar()

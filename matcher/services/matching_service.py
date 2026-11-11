@@ -268,17 +268,3 @@ class MatchingService:
     @staticmethod
     def _now():
         return timezone.now().isoformat(timespec="seconds")
-
-
-# ---------- Used by the views until they become classes (P3) ----------
-
-def read_resume(resume_file):
-    return MatchingService.default().read_resume(resume_file).to_dict()
-
-
-def match_jobs_to_resume(resume_id=None):
-    return MatchingService.default().match_jobs_to_resume(resume_id)
-
-
-def match_candidates_to_job(job_file, candidate_files):
-    return MatchingService.default().match_candidates_to_job(job_file, candidate_files).to_dict()

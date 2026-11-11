@@ -19,9 +19,6 @@ import json
 import logging
 
 from ..contracts.ai import AIProviderError
-from ..domain.resume import Resume
-from .ai_providers import GeminiProvider
-from .ai_tasks import CandidateComparisonTask, JobSuggestionTask, ResumeExtractionTask
 
 logger = logging.getLogger(__name__)
 
@@ -99,24 +96,3 @@ class AIManager:
             logger.warning("AI reply is JSON but not an object: %.200s", reply)
             return None
         return data
-
-
-# ---------- Used by the matching service until it becomes a class (P3) ----------
-
-def _gemini_manager():
-    return AIManager(GeminiProvider())
-
-
-def extract_resume(resume_file):
-    """Read a resume PDF. Returns {"education", "experience", "skills"} or None."""
-    return _gemini_manager().run(ResumeExtractionTask(resume_file))
-
-
-def suggest_jobs(resume, max_jobs, options):
-    """Suggest job titles for a saved resume record. Returns {"jobs": [...]} or None."""
-    return _gemini_manager().run(JobSuggestionTask(Resume.from_dict(resume), max_jobs, options))
-
-
-def compare_candidates(job_file, candidate_files, options):
-    """Compare every resume with the job posting. Returns {"job": ..., "candidates": [...]} or None."""
-    return _gemini_manager().run(CandidateComparisonTask(job_file, candidate_files, options))

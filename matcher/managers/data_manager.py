@@ -1,9 +1,9 @@
 """
 Data Manager - saves, loads and queries records kept as JSON files in data/.
 
-Each collection is one file holding a list of records, e.g.
-load_records("resumes") reads data/resumes.json. Missing, empty or broken
-files never crash the app.
+Each collection is one file holding a list of records, e.g. the "resumes"
+collection is data/resumes.json. Missing, empty or broken files never crash
+the app.
 
     JsonRepository  a RecordRepository (contracts/data.py) that keeps each
                     collection in its own JSON file
@@ -86,45 +86,18 @@ class JsonRepository(RecordRepository):
             if not path.name.endswith(".broken.json")
         )
 
+    def check_on_startup(self):
+        """Load every collection and log how many records each has (run once at startup).
 
+        Missing or broken files show up in the log straight away instead of
+        on the first upload. Returns {"resumes": [...], ...}.
+        """
+        if not self.data_dir.exists():
+            logger.info("No saved records yet (%s does not exist)", self.data_dir)
+            return {}
 
-# ---------- Used by the views and matching service until they become classes (P3) ----------
+        everything = self.load_everything()
+        for name, records in everything.items():
+            logger.info("Loaded %s %s", len(records), name)
+        return everything
 
-def load_records(collection):
-    """Return the list of records in a collection ([] if missing, empty or broken)."""
-    return JsonRepository().load(collection)
-
-
-def save_record(collection, record):
-    """Add a record to a collection and return it with its new id, e.g. "R001"."""
-    return JsonRepository().save(collection, record)
-
-
-def find_record(collection, record_id):
-    """Return the record with this id, or None."""
-    return JsonRepository().find(collection, record_id)
-
-
-def filter_records(collection, **fields):
-    """Return the records whose fields all equal the given values.
-
-    e.g. filter_records("job_matches", resume_id="R001")
-    """
-    return JsonRepository().filter(collection, **fields)
-
-
-def load_all_records():
-    """Load every collection in data/ (run once at startup).
-
-    Returns {"resumes": [...], "job_matches": [...], ...} and logs how many
-    records each has, so missing or broken files show up straight away.
-    """
-    repository = JsonRepository()
-    if not repository.data_dir.exists():
-        logger.info("No saved records yet (%s does not exist)", repository.data_dir)
-        return {}
-
-    all_records = repository.load_everything()
-    for name, records in all_records.items():
-        logger.info("Loaded %s %s", len(records), name)
-    return all_records
