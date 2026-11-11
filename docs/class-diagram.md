@@ -1,9 +1,10 @@
-# Class diagram (draft)
+# Class diagram
 
-The Phase 2 class design. The contracts (`AIProvider`, `AITask`,
-`RecordRepository`, `ScoreComponent`) and the domain classes exist now in
-`matcher/contracts/` and `matcher/domain/`. The rest are built in P2/P3 by
-the owner shown in each section; update this diagram if a design changes.
+The Phase 2 class design, as built. Contracts are in `matcher/contracts/`,
+domain classes in `matcher/domain/`, the managers in `matcher/managers/`,
+the service in `matcher/services/` and the views in `matcher/views.py`.
+`FakeProvider` and `InMemoryRepository` are test doubles in
+`matcher/tests/fakes.py`. Update this diagram if a design changes.
 
 `-` is private (`self._name`), `+` is public, `*` marks abstract methods and
 `$` static ones (class methods).
@@ -106,8 +107,20 @@ classDiagram
     JobFilter ..> JobSuggestion : filters
 
     %% ---------- IO Manager (P2: Li Wei) ----------
-    class UploadValidator
-    class JobFilterForm
+    class UploadValidator {
+        -_max_size_mb
+        -_max_candidates
+        +check_pdf(file) str
+        +check_resume_upload(files) tuple
+        +check_employer_upload(files) tuple
+    }
+    class JobFilterForm {
+        -_filters
+        +from_query(query) JobFilterForm$
+        +options_for_ai() dict$
+        +allowed_value(value, choices) str$
+        +filter_bar() dict
+    }
 
     %% ---------- Domain (P1) ----------
     class Resume {
@@ -147,19 +160,58 @@ classDiagram
     MatchResult --> Candidate : association
     CandidateScorer ..> MatchResult : creates
 
-    %% ---------- Service and aggregation (P3) ----------
+    %% ---------- Service, Shortlist and views (P3: Roy) ----------
     class MatchingService {
         -_ai : AIManager
         -_repository : RecordRepository
         -_scorer : CandidateScorer
+        -_candidate_ranker : CandidateRanker
+        -_job_ranker : JobRanker
+        +default() MatchingService$
+        +read_resume(file) Resume
+        +match_jobs_to_resume(resume_id) dict
+        +match_candidates_to_job(job_file, files) Shortlist
+        +find_shortlist(id) Shortlist
+        +ranked_candidates(shortlist) list
+        +suggested_jobs(id) list
     }
+    class MatchingError
     class Shortlist {
-        -_candidates : list~Candidate~
+        -_job : JobPosting
+        -_results : list~MatchResult~
+        +add(result)
+        +ranked(ranker) list
+        +strong_matches
+        +to_dict() dict
     }
+    class MatchingView {
+        +service MatchingService
+    }
+    class UploadView {
+        +get(request)
+        +show_form(request, errors)
+    }
+    class EmployerUploadView
+    class JobSeekerUploadView
+    class EmployerResultsView
+    class JobResultsView
     MatchingService --> AIManager : association
     MatchingService --> RecordRepository : association
     MatchingService --> CandidateScorer : association
-    Shortlist o-- Candidate : aggregation
+    MatchingService --> CandidateRanker : association
+    MatchingService --> JobRanker : association
+    MatchingService ..> MatchingError : raises
+    MatchingService ..> Shortlist : creates
+    Shortlist o-- MatchResult : aggregation
+    Shortlist --> JobPosting
+    MatchingView <|-- UploadView
+    UploadView <|-- EmployerUploadView
+    UploadView <|-- JobSeekerUploadView
+    MatchingView <|-- EmployerResultsView
+    MatchingView <|-- JobResultsView
+    MatchingView --> MatchingService : uses
+    UploadView ..> UploadValidator : uses
+    JobResultsView ..> JobFilterForm : uses
 ```
 
 ## Where each OOP concept is shown
@@ -170,8 +222,8 @@ classDiagram
 | Encapsulation | Private `_fields` behind read-only properties in every domain class; `GeminiProvider._api_key` |
 | Interface | `AIProvider`, implemented by `GeminiProvider` and `FakeProvider` |
 | Abstract class | `AITask`, `RecordRepository` and `ScoreComponent`, which have abstract methods and shared concrete ones (`find`, `filter`, `points`) |
-| Inheritance | The three `AITask` subclasses, the two repositories, the score components |
+| Inheritance | The three `AITask` subclasses, the two repositories, the score components, the views (`MatchingView` → `UploadView` → the two upload pages) |
 | Polymorphism | `AIManager.run(task)` runs any `AITask`; `CandidateScorer` adds up `points()` from any `ScoreComponent`; callers use any `RecordRepository` |
-| Association | `MatchingService` uses the AI Manager, repository and scorer it is given; `MatchResult` refers to a `Candidate` |
-| Aggregation | `AIManager` holds an `AIProvider` made outside it; `Shortlist` holds `Candidate`s that exist without it |
+| Association | `MatchingService` uses the AI Manager, repository, scorer and rankers it is given; `MatchResult` refers to a `Candidate` |
+| Aggregation | `AIManager` holds an `AIProvider` made outside it; `Shortlist` holds `MatchResult`s made by the scorer, which can exist without it |
 | Composition | `CandidateScorer` creates and owns its `ScoreComponent`s |

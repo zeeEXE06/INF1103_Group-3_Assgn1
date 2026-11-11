@@ -44,26 +44,34 @@ A Django web app that matches resumes and jobs using Google Gemini.
 ## How it works
 
 ```text
-            views.py  (pages, messages)
-                │
-                ▼
-     services/matching_service.py   (the three AI flows)
-        │            │            │
-        ▼            ▼            ▼
-   ai_manager   data_manager   logic_manager        io_manager
-   (Gemini)     (data/*.json)  (score, rank,        (forms and
-                               filter)              upload checks)
+        views.py  (class-based views: pages, messages)
+            │                         │
+            ▼                         ▼
+   MatchingService               io_manager
+   (the three AI flows)          (UploadValidator, JobFilterForm)
+     │          │          │
+     ▼          ▼          ▼
+ AIManager  JsonRepository  CandidateScorer, rankers, JobFilter
+ (Gemini)   (data/*.json)   (logic_manager)
 ```
+
+Every manager is a set of classes built on the abstract contracts in
+`matcher/contracts/`, and they pass domain objects (`Resume`, `Candidate`,
+`Shortlist`, ...) from `matcher/domain/` between them. `MatchingService` is
+given its managers when it is created, so the tests can give it a
+`FakeProvider` and an `InMemoryRepository` instead. The full class diagram is
+in [docs/class-diagram.md](docs/class-diagram.md).
 
 | Module | Job |
 |---|---|
-| `managers/io_manager.py` | Upload and filter forms, PDF checks |
+| `managers/io_manager.py` | `UploadValidator` checks uploads are real, readable PDFs (with `pypdf`) under the limits; `JobFilterForm` reads the results-page filters and gives the AI its allowed values |
 | `managers/ai_manager.py` | `AIManager` runs any AI task through an AI provider, checks the JSON reply and asks again if it's in the wrong format. No business logic. |
 | `managers/ai_providers.py` | `GeminiProvider`: sends the prompts and PDFs to Gemini, retries, falls back to backup models |
 | `managers/ai_tasks.py` | `ResumeExtractionTask`, `JobSuggestionTask`, `CandidateComparisonTask`: each builds its prompt and checks its reply's structure |
-| `managers/data_manager.py` | The only code that reads and writes `data/*.json`: saving, loading, the `find_record()` and `filter_records()` queries, and `load_all_records()` at startup. Missing or broken files never crash the app. |
-| `managers/logic_manager.py` | Scores and ranks candidates, ranks and filters jobs. Never calls the AI or reads files. |
-| `services/matching_service.py` | `read_resume()`, `match_jobs_to_resume()`, `match_candidates_to_job()` |
+| `managers/data_manager.py` | `JsonRepository`: the only code that reads and writes `data/*.json`. Saving, loading, the `find()`/`filter()` queries and a check of every file at startup. Missing or broken files never crash the app. |
+| `managers/logic_manager.py` | `CandidateScorer` (made of six score components) and `StrongMatchRule` score candidates; `CandidateRanker`, `JobRanker` and `JobFilter` order and filter results. Never calls the AI or reads files. |
+| `services/matching_service.py` | `MatchingService`: `read_resume()`, `match_jobs_to_resume()`, `match_candidates_to_job()`, plus the lookups the results pages use |
+| `views.py` | One class-based view per page; the two upload pages share an `UploadView` base class |
 
 ### Candidate scoring (employer)
 
@@ -273,7 +281,7 @@ INF1103_Group-3_Assgn1/
 ├── docs/
 │   └── class-diagram.md            # Phase 2 class diagram (Mermaid)
 └── matcher/
-    ├── views.py                    # Pages: handle the request, show messages
+    ├── views.py                    # Class-based views: handle the request, show messages
     ├── urls.py
     ├── context_processors.py       # Adds ?v= to CSS/JS links so browsers load new versions
     ├── models.py                   # Empty: no database models
@@ -283,16 +291,16 @@ INF1103_Group-3_Assgn1/
     │   ├── data.py                 # RecordRepository
     │   └── scoring.py              # ScoreComponent
     ├── domain/                     # Resume, JobSuggestion, JobPosting, Candidate,
-    │                               # MatchResult
+    │                               # MatchResult, Shortlist
     ├── managers/
-    │   ├── io_manager.py           # Forms and upload checks
+    │   ├── io_manager.py           # UploadValidator, JobFilterForm
     │   ├── ai_manager.py           # AIManager: runs AI tasks, checks replies
     │   ├── ai_providers.py         # GeminiProvider: Google Gemini calls
     │   ├── ai_tasks.py             # The three AI requests: prompts and reply checks
-    │   ├── data_manager.py         # JSON save/load
-    │   └── logic_manager.py        # Scoring, ranking, filtering
+    │   ├── data_manager.py         # JsonRepository: JSON save/load
+    │   └── logic_manager.py        # CandidateScorer, rankers, JobFilter
     ├── services/
-    │   └── matching_service.py     # The three AI flows
+    │   └── matching_service.py     # MatchingService: the three AI flows
     ├── templates/matcher/          # landing, employer, job_seeker and the two results pages
     └── static/
         ├── css/style.css
