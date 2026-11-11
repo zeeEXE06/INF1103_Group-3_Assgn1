@@ -19,3 +19,9 @@ data/
 .DS_Store
 .vscode/
 .idea/
+
+# Course documents, archives, copies of the repo and patch files - not part of the app
+*.pdf
+*.zip
+*.patch
+INF1103_Group-3_Assgn1-main/
