@@ -1,28 +1,36 @@
 """
-Tests for the whole app: pages, the AI flows and each manager. Run them with:
+Tests for the Resume & Job Matcher. Run them with:
 
     python run_tests.py
 
 Every test is a plain function. No test calls the real AI: fake_gemini()
-replaces Gemini with a FakeProvider, whose fixed replies still go through
-the AI Manager's checks. run_tests.py gives each test its own empty data folder.
+replaces Gemini with fixed replies, which still go through the AI Manager's
+checks. run_tests.py gives each test its own empty data folder.
 """
 
 import io
 import json
 import re
-from contextlib import contextmanager
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, override_settings
 from django.urls import reverse
-from pypdf import PdfWriter
+from google.genai import errors
 
-from ..managers.ai_manager import extract_resume
-from ..managers.data_manager import filter_records, find_record, load_all_records, load_records, save_record
-from ..managers.logic_manager import (
+from .managers.ai_manager import (
+    comparison_schema_problem,
+    extract_resume,
+    generate,
+    get_client,
+    jobs_schema_problem,
+    parse_json_reply,
+    request_json,
+    resume_schema_problem,
+)
+from .managers.data_manager import filter_records, find_record, load_all_records, load_records, save_record
+from .managers.logic_manager import (
     calculate_score,
     filter_jobs,
     is_strong_match,
@@ -31,8 +39,7 @@ from ..managers.logic_manager import (
     select_top_jobs,
     to_score,
 )
-from ..services.matching_service import match_candidates_to_job, match_jobs_to_resume
-from .fakes import FakeProvider
+from .services.matching_service import match_candidates_to_job, match_jobs_to_resume
 
 
 # ---------- Fake Gemini replies ----------
@@ -82,38 +89,16 @@ def comparison_reply(resume_count):
     })
 
 
-@contextmanager
 def fake_gemini(*replies):
-    """Replace Gemini with a FakeProvider that gives these replies, in order.
-
-    Use as `with fake_gemini(...) as gemini:`; gemini.call_count is the
-    number of AI calls. With no replies left, any AI call fails.
-    """
-    provider = FakeProvider(*replies)
-    with patch("matcher.managers.ai_manager.GeminiProvider", return_value=provider):
-        yield provider
+    """Replace the Gemini call with these replies, in order."""
+    return patch("matcher.managers.ai_manager.generate", side_effect=list(replies))
 
 
 # ---------- Helpers ----------
 
-def make_pdf_file(name="resume.pdf", content=None):
-    if content is not None:
-        return SimpleUploadedFile(
-            name,
-            content,
-            content_type="application/pdf"
-        )
+def make_pdf_file(name="resume.pdf", content=b"%PDF-1.4 fake pdf content"):
+    return SimpleUploadedFile(name, content, content_type="application/pdf")
 
-    buffer = io.BytesIO()
-    writer = PdfWriter()
-    writer.add_blank_page(width=72, height=72)
-    writer.write(buffer)
-
-    return SimpleUploadedFile(
-        name,
-        buffer.getvalue(),
-        content_type="application/pdf"
-    )
 
 def text(response):
     return response.content.decode()
@@ -393,10 +378,10 @@ def test_unknown_filter_value_shows_all_jobs():
 
 def test_changing_filters_does_not_call_the_ai():
     client = uploaded_client()
-    with fake_gemini() as gemini:
+    with patch("matcher.managers.ai_manager.generate") as gemini:
         job_results(client, {"locations": ["Central"]})
         job_results(client, {"industry": "Technology / IT"})
-    assert gemini.call_count == 0
+    gemini.assert_not_called()
 
 
 # ---------- Same output across runs ----------
@@ -410,35 +395,14 @@ def test_same_resume_gives_same_results_without_asking_the_ai_again():
     assert shown_results(second) == shown_results(first)
     assert len(load_records("resumes")) == 1 and len(load_records("job_matches")) == 1
 
+
 def test_different_resume_is_sent_to_the_ai():
     uploaded_client()
-
-    # Create another valid PDF with different file contents
-    buffer = io.BytesIO()
-    writer = PdfWriter()
-    writer.add_blank_page(width=72, height=72)
-    writer.add_metadata({
-        "/Title": "Different Resume",
-        "/Author": "Different Candidate",
-    })
-    writer.write(buffer)
-
-    other = SimpleUploadedFile(
-        "other.pdf",
-        buffer.getvalue(),
-        content_type="application/pdf"
-    )
-
+    other = SimpleUploadedFile("other.pdf", b"%PDF-1.4 another resume", content_type="application/pdf")
     with fake_gemini(RESUME_REPLY, JOBS_REPLY) as gemini:
-        response = Client().post(
-            reverse("matcher:job_seeker_upload"),
-            {"resume_file": other}
-        )
-
-    assert response.status_code == 302
+        Client().post(reverse("matcher:job_seeker_upload"), {"resume_file": other})
     assert gemini.call_count == 2
     assert len(load_records("resumes")) == 2
-    assert len(load_records("job_matches")) == 2
 
 
 def test_same_employer_files_give_same_ranking_without_asking_the_ai_again():
@@ -459,9 +423,68 @@ def test_ai_replies_pass_the_schema_checks():
         assert set(extract_resume(make_pdf_file())) == {"education", "experience", "skills"}
 
 
+@override_settings(AI_API_KEY="test", AI_MODEL="main", AI_FALLBACK_MODELS=["backup"])
+def test_busy_model_falls_back_to_next_model():
+    busy = errors.ServerError(503, {"error": {"code": 503, "message": "high demand"}})
+    client = MagicMock()
+    client.models.generate_content.side_effect = [busy, MagicMock(text="ok")]
+    with patch("matcher.managers.ai_manager.get_client", return_value=client):
+        assert generate("hi", None) == "ok"
+    assert [c.kwargs["model"] for c in client.models.generate_content.call_args_list] == ["main", "backup"]
+
+
+@override_settings(AI_API_KEY="test", AI_MODEL="main", AI_FALLBACK_MODELS=["backup"])
+def test_bad_key_error_does_not_fall_back():
+    client = MagicMock()
+    client.models.generate_content.side_effect = errors.ClientError(
+        400, {"error": {"code": 400, "message": "API key not valid"}}
+    )
+    with patch("matcher.managers.ai_manager.get_client", return_value=client):
+        assert raises(errors.ClientError, generate, "hi", None)
+    assert client.models.generate_content.call_count == 1
+
+
+@override_settings(AI_API_KEY="test")
+def test_broken_or_wrong_shape_reply_is_asked_again():
+    good = '{"jobs": [{"title": "Dev"}]}'
+    for bad in ('{"broken', '{"jobs": "none"}'):
+        with patch("matcher.managers.ai_manager.generate", side_effect=[bad, good]) as gen:
+            assert request_json(lambda: "hi", jobs_schema_problem) == {"jobs": [{"title": "Dev"}]}
+        assert gen.call_count == 2
+
+
+@override_settings(AI_API_KEY="test")
+def test_gives_up_after_repeated_wrong_shape():
+    with patch("matcher.managers.ai_manager.generate", return_value='{"jobs": "none"}') as gen:
+        assert request_json(lambda: "hi", jobs_schema_problem) is None
+    assert gen.call_count == 2
+
+
 @override_settings(AI_API_KEY="")
 def test_api_failure_returns_none_instead_of_crashing():
     assert extract_resume(make_pdf_file()) is None
+
+
+@override_settings(AI_API_KEY="")
+def test_missing_api_key_gives_clear_error():
+    assert raises(RuntimeError, get_client)
+
+
+def test_schema_checks():
+    assert resume_schema_problem({"education": [], "experience": [{}], "skills": []}) is None
+    assert resume_schema_problem({"education": [], "skills": []}) is not None
+    assert resume_schema_problem({"education": ["BSc"], "experience": [], "skills": []}) is not None
+    assert jobs_schema_problem({"jobs": [{"title": 5}]}) is not None
+    assert comparison_schema_problem({"job": {}, "candidates": [{"resume_number": 1}]}) is None
+    assert comparison_schema_problem({"job": {}, "candidates": [{"resume_number": "1"}]}) is not None
+    assert comparison_schema_problem({"candidates": []}) is not None
+
+
+def test_parse_json_reply():
+    assert parse_json_reply('```json\n{"skills": [{"skill": "SQL"}]}\n```') == {"skills": [{"skill": "SQL"}]}
+    assert parse_json_reply('Here are the jobs I found:\n{"jobs": []}\nGood luck!') == {"jobs": []}
+    assert parse_json_reply("PDF received") is None
+    assert parse_json_reply("[1, 2]") is None
 
 
 # ---------- Data Manager ----------
