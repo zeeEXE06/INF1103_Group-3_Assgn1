@@ -1,10 +1,12 @@
 """
 Test doubles - stand-ins for the real services, so tests never call the AI.
 
-    FakeProvider  an AIProvider that gives fixed replies instead of asking Gemini
+    FakeProvider        an AIProvider that gives fixed replies instead of asking Gemini
+    InMemoryRepository  a RecordRepository that keeps records in memory, not files
 """
 
 from ..contracts.ai import AIProvider, AIProviderError
+from ..contracts.data import RecordRepository
 
 
 class FakeProvider(AIProvider):
@@ -38,3 +40,26 @@ class FakeProvider(AIProvider):
         if isinstance(reply, Exception):
             raise reply
         return reply
+
+
+class InMemoryRepository(RecordRepository):
+    """A RecordRepository that keeps records in a dict instead of JSON files.
+
+    Records are copied in and out, like JsonRepository, so changing a
+    returned record never changes what is stored.
+    """
+
+    def __init__(self):
+        self._collections = {}
+
+    def load(self, collection):
+        return [dict(record) for record in self._collections.get(collection, [])]
+
+    def save(self, collection, record):
+        records = self._collections.setdefault(collection, [])
+        record = {"id": f"{collection[0].upper()}{len(records) + 1:03d}", **record}
+        records.append(dict(record))
+        return record
+
+    def collection_names(self):
+        return sorted(self._collections)

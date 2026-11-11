@@ -1,5 +1,5 @@
 """
-Tests for the Data Manager's JsonRepository. run_tests.py gives each test
+Tests for the Data Manager's repositories. run_tests.py gives each test
 its own empty DATA_DIR, so the real data/ folder is never touched.
 """
 
@@ -8,6 +8,7 @@ import json
 from django.conf import settings
 
 from ..managers.data_manager import JsonRepository
+from .fakes import InMemoryRepository
 
 
 def data_file(name):
@@ -99,3 +100,34 @@ def test_two_repositories_on_different_folders_stay_separate():
     a, b = JsonRepository(settings.DATA_DIR / "a"), JsonRepository(settings.DATA_DIR / "b")
     a.save("resumes", {"filename": "a.pdf"})
     assert b.load("resumes") == []
+
+
+# ---------- Every repository keeps the RecordRepository contract ----------
+
+def check_keeps_the_contract(repository):
+    """What every RecordRepository must do, whatever it stores records in."""
+    assert repository.load("resumes") == []
+    assert repository.collection_names() == []
+
+    first = repository.save("resumes", {"filename": "a.pdf", "file_hash": "x"})
+    repository.save("resumes", {"filename": "b.pdf", "file_hash": "y"})
+    assert first == {"id": "R001", "filename": "a.pdf", "file_hash": "x"}
+    assert [r["id"] for r in repository.load("resumes")] == ["R001", "R002"]
+
+    repository.load("resumes")[0]["filename"] = "changed.pdf"
+    assert repository.find("resumes", "R001")["filename"] == "a.pdf"
+
+    assert repository.filter("resumes", file_hash="y")[0]["filename"] == "b.pdf"
+    assert repository.newest("resumes")["id"] == "R002"
+    assert repository.find("resumes", "R999") is None
+    assert repository.collection_names() == ["resumes"]
+
+
+def test_json_and_in_memory_repositories_can_replace_each_other():
+    check_keeps_the_contract(JsonRepository())
+    check_keeps_the_contract(InMemoryRepository())
+
+
+def test_in_memory_repository_never_touches_the_data_folder():
+    InMemoryRepository().save("resumes", {"filename": "a.pdf"})
+    assert not data_file("resumes.json").exists()
