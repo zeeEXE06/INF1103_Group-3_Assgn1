@@ -90,7 +90,8 @@ def fake_gemini(*replies):
     number of AI calls. With no replies left, any AI call fails.
     """
     provider = FakeProvider(*replies)
-    with patch("matcher.managers.ai_manager.GeminiProvider", return_value=provider):
+    with patch("matcher.services.matching_service.GeminiProvider", return_value=provider), \
+            patch("matcher.managers.ai_manager.GeminiProvider", return_value=provider):
         yield provider
 
 
@@ -227,7 +228,7 @@ def test_compare_candidates_marks_skipped_resume_unreadable():
         {"resume_number": 1, "name": "Ann", "matched_skills": ["Python"], "missing_skills": [],
          "experience_match": True, "location_match": True},
     ]}
-    with patch("matcher.services.matching_service.compare_candidates", return_value=reply):
+    with fake_gemini(json.dumps(reply)):
         record = match_candidates_to_job(make_pdf_file("job.pdf"), [make_pdf_file("ann.pdf"), make_pdf_file("bad.pdf")])
     ann, bad = record["candidates"]
     assert (ann["name"], ann["filename"], ann["match_score"], ann["strong_match"]) == ("Ann", "ann.pdf", 75, True)
@@ -236,7 +237,7 @@ def test_compare_candidates_marks_skipped_resume_unreadable():
 
 
 def test_compare_candidates_raises_when_ai_fails():
-    with patch("matcher.services.matching_service.compare_candidates", return_value=None):
+    with fake_gemini():  # no replies: the AI fails
         assert raises(ValueError, match_candidates_to_job, make_pdf_file("job.pdf"), [make_pdf_file("a.pdf")])
 
 
@@ -260,7 +261,7 @@ def test_job_seeker_upload_redirects_and_saves_resume():
 
 
 def test_job_seeker_ai_failure_shows_error_and_saves_nothing():
-    with patch("matcher.services.matching_service.extract_resume", return_value=None):
+    with fake_gemini():  # no replies: the AI fails
         response = upload_resume(Client())
     assert response.status_code == 200
     assert "The AI could not process your upload" in text(response)
@@ -292,7 +293,7 @@ def test_suggested_jobs_are_sorted_and_cleaned():
         {"title": "Low", "match_score": "40", "location": "Mars", "work_arrangement": "WFH"},
         {"title": "High", "match_score": 150, "industry": "Technology / IT"},
     ]}
-    with patch("matcher.services.matching_service.suggest_jobs", return_value=reply):
+    with fake_gemini(json.dumps(reply)):
         high, low = match_jobs_to_resume()["jobs"]
     assert (high["title"], high["match_score"]) == ("High", 100)
     assert (low["match_score"], low["location"], low["work_arrangement"]) == (40, "", "WFH")
@@ -308,7 +309,7 @@ def test_suggested_jobs_get_jobstreet_links_without_duplicates():
         {"title": "C++ / Embedded Engineer"},
         {"title": "Data Analyst"},
     ]}
-    with patch("matcher.services.matching_service.suggest_jobs", return_value=reply):
+    with fake_gemini(json.dumps(reply)):
         record = match_jobs_to_resume()
     assert [job["url"] for job in record["jobs"]] == [
         "https://sg.jobstreet.com/junior-python-developer-jobs",
