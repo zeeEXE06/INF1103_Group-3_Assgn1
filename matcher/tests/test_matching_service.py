@@ -131,6 +131,59 @@ def test_same_employer_files_reuse_the_saved_shortlist():
     assert matching.find_shortlist("C999") is None
 
 
+def test_shortlist_is_scored_with_the_chosen_profile():
+    experience_first = ScoringProfile.built_in()[2]
+    matching, _, _ = service(comparison_reply(2))
+    shortlist = matching.match_candidates_to_job(make_pdf_file("job.pdf"),
+                                                 [make_pdf_file("a.pdf"), make_pdf_file("b.pdf")],
+                                                 experience_first)
+    assert shortlist.profile.to_dict() == experience_first.to_dict()
+    assert shortlist.results[1].score == 45  # 20 skills + 10 education + 10 location + 5 work arrangement
+
+
+def test_same_files_with_another_profile_are_scored_again_without_the_ai():
+    matching, provider, repository = service(comparison_reply(2))
+    files = lambda: (make_pdf_file("job.pdf"), [make_pdf_file("a.pdf"), make_pdf_file("b.pdf")])
+    balanced = matching.match_candidates_to_job(*files())
+    experience_first = matching.match_candidates_to_job(*files(), ScoringProfile.built_in()[2])
+    balanced_again = matching.match_candidates_to_job(*files())
+
+    assert provider.call_count == 1
+    assert [r.score for r in balanced.results] == [100, 57]
+    assert [r.score for r in experience_first.results] == [100, 45]
+    assert experience_first.job.title == balanced.job.title
+    assert balanced_again.id == balanced.id  # reused, not saved again
+    assert len(repository.load("candidate_matches")) == 2
+
+
+def test_scoring_profiles_are_the_built_in_ones_then_the_saved_ones():
+    matching, _, repository = service()
+    mine = ScoringProfile("Location matters", dict(ScoringProfile.DEFAULT_WEIGHTS, skills=20, location=30))
+    saved = matching.save_profile(mine)
+    repository.save("scoring_profiles", {"name": "Broken", "weights": {"skills": 5}})
+
+    assert saved.id == "S001" and saved.name == "Location matters"
+    assert [p.name for p in matching.scoring_profiles()] == [
+        "Balanced", "Skills first", "Experience first", "Location matters"]
+    assert matching.find_profile("S001").weights == mine.weights
+    assert matching.find_profile("balanced").name == "Balanced"
+    assert matching.find_profile("S999") is None and matching.find_profile(None) is None
+
+
+def test_the_same_profile_is_not_saved_twice():
+    matching, _, repository = service()
+    mine = ScoringProfile("Mine", dict(ScoringProfile.DEFAULT_WEIGHTS, skills=30, experience=35))
+    assert matching.save_profile(mine).id == matching.save_profile(mine).id == "S001"
+    assert len(repository.load("scoring_profiles")) == 1
+
+
+def test_a_profile_the_scorer_cannot_use_is_not_saved():
+    matching, _, repository = service()
+    unknown_part = ScoringProfile("Salary", dict(ScoringProfile.DEFAULT_WEIGHTS, skills=30, salary=10))
+    assert raises(MatchingError, matching.save_profile, unknown_part)
+    assert repository.load("scoring_profiles") == []
+
+
 def test_ai_failure_when_comparing_raises():
     matching, _, repository = service()
     assert raises(MatchingError, matching.match_candidates_to_job, make_pdf_file("job.pdf"), [make_pdf_file("a.pdf")])
