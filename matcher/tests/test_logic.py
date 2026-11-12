@@ -6,6 +6,7 @@ rule, and ranking and filtering. They use domain objects only - no AI, no files.
 from ..contracts.scoring import ScoreComponent
 from ..domain.candidate import Candidate, MatchResult
 from ..domain.job import JobSuggestion
+from ..domain.scoring_profile import ScoringProfile
 from ..managers.logic_manager import (
     CandidateRanker,
     CandidateScorer,
@@ -80,11 +81,12 @@ def test_full_match_scores_100_and_is_strong():
     assert (result.score, result.strong_match) == (100, True)
 
 
-def test_default_weights():
+def test_default_profile_is_balanced():
     # Half the skills (20) + experience (25) + location (10)
     candidate = make_candidate(matched=1, missing=1, experience_match=True, location_match=True)
     assert CandidateScorer().score(candidate).score == 55
-    assert CandidateScorer().weights == CandidateScorer.DEFAULT_WEIGHTS
+    assert CandidateScorer().weights == ScoringProfile.DEFAULT_WEIGHTS
+    assert CandidateScorer().profile.name == "Balanced"
 
 
 def test_unreadable_resume_scores_0():
@@ -92,29 +94,78 @@ def test_unreadable_resume_scores_0():
     assert (result.score, result.strong_match) == (0, False)
 
 
+def profile(strong_match_skills=70, **weights):
+    return ScoringProfile("Custom", dict(ScoringProfile.DEFAULT_WEIGHTS, **weights), strong_match_skills)
+
+
 def test_custom_weights_change_the_score():
-    weights = dict(CandidateScorer.DEFAULT_WEIGHTS, skills=20, experience=45)
     candidate = make_candidate(matched=0, missing=3, experience_match=True)
     assert CandidateScorer().score(candidate).score == 25
-    assert CandidateScorer(weights).score(candidate).score == 45
+    assert CandidateScorer(profile(skills=20, experience=45)).score(candidate).score == 45
 
 
-def test_weights_must_cover_every_part_and_add_up_to_100():
-    assert raises(ValueError, CandidateScorer, dict(CandidateScorer.DEFAULT_WEIGHTS, skills=50))
-    assert raises(ValueError, CandidateScorer, {"skills": 100})
-    assert raises(ValueError, CandidateScorer, dict(CandidateScorer.DEFAULT_WEIGHTS, salary=0))
+def test_custom_weights_change_the_ranking():
+    """A skilled newcomer against an experienced candidate with fewer skills."""
+    skilled = make_candidate(matched=3, missing=0)
+    experienced = make_candidate(matched=1, missing=2, experience_match=True)
+    by_skills = CandidateScorer(profile(skills=60, experience=5))
+    by_experience = CandidateScorer(profile(skills=20, experience=45))
+
+    def ranking(scorer):
+        results = [scorer.score(skilled), scorer.score(experienced)]
+        return [result.candidate for result in CandidateRanker().rank(results)]
+
+    assert ranking(by_skills) == [skilled, experienced]
+    assert ranking(by_experience) == [experienced, skilled]
 
 
-def test_scorer_uses_the_strong_match_rule_it_is_given():
+def test_profile_must_weight_every_component():
+    no_salary = ScoringProfile("No salary", dict(ScoringProfile.DEFAULT_WEIGHTS, skills=30, salary=10))
+    skills_only = ScoringProfile("Skills only", {"skills": 100})
+    assert raises(ValueError, CandidateScorer, no_salary)
+    assert raises(ValueError, CandidateScorer, skills_only)
+
+
+def test_profile_sets_the_strong_match_threshold():
     candidate = make_candidate(5, 5, experience_match=True, location_match=True)
     assert not CandidateScorer().score(candidate).strong_match
-    assert CandidateScorer(strong_match_rule=StrongMatchRule(0.5)).score(candidate).strong_match
+    assert CandidateScorer(profile(strong_match_skills=50)).score(candidate).strong_match
+
+
+def test_scorer_with_another_profile_is_a_new_scorer():
+    scorer = CandidateScorer()
+    other = scorer.with_profile(profile(skills=20, experience=45))
+    assert other is not scorer and other.weights["skills"] == 20
+    assert scorer.weights["skills"] == 40
 
 
 def test_scorer_keeps_its_components_to_itself():
     scorer = CandidateScorer()
     scorer.weights["skills"] = 0
     assert scorer.weights["skills"] == 40
+
+
+class SummaryComponent(ScoreComponent):
+    """A new part of the score, written outside the Logic Manager: full
+    points if the AI wrote a summary of the candidate."""
+
+    name = "summary"
+
+    def fraction(self, candidate):
+        return 1.0 if candidate.summary else 0.0
+
+
+def test_a_new_score_component_needs_no_change_to_the_scorer():
+    """Open/closed: CandidateScorer is extended with a new component type, not edited."""
+    component_types = {**CandidateScorer.COMPONENT_TYPES, "summary": SummaryComponent}
+    with_summary = ScoringProfile("With summary", dict(ScoringProfile.DEFAULT_WEIGHTS, skills=30, summary=10))
+    scorer = CandidateScorer(with_summary, component_types)
+
+    assert scorer.weights["summary"] == 10
+    assert scorer.score(make_candidate(matched=0, missing=3, summary="Good fit.")).score == 10
+    assert scorer.score(make_candidate(matched=0, missing=3)).score == 0
+    # with_profile() keeps the new component type
+    assert scorer.with_profile(with_summary).weights == scorer.weights
 
 
 # ---------- CandidateRanker ----------

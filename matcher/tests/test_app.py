@@ -118,15 +118,25 @@ def upload_resume(client, follow=False):
     )
 
 
-def upload_employer_files(client, candidate_names, follow=False):
+def upload_employer_files(client, candidate_names, follow=False, **profile_fields):
+    """Post the employer form; profile_fields are the scoring profile inputs, e.g. profile="skills-first"."""
     return client.post(
         reverse("matcher:employer_upload"),
         {
             "job_file": make_pdf_file("job.pdf"),
             "candidate_files": [make_pdf_file(name) for name in candidate_names],
+            **profile_fields,
         },
         follow=follow,
     )
+
+
+def custom_profile_fields(name="Location matters", **weights):
+    """The upload form's custom profile inputs (default: Balanced weights)."""
+    weights = {"skills": 40, "experience": 25, "education": 10, "location": 10,
+               "work_arrangement": 10, "working_hours": 5, **weights}
+    return {"profile": "custom", "profile_name": name, "strong_match_skills": "70",
+            **{f"weight_{part}": str(weight) for part, weight in weights.items()}}
 
 
 def load_records(collection):
@@ -201,7 +211,7 @@ def test_employer_results_are_ranked_with_strong_match():
     with fake_gemini(comparison_reply(3)):
         page = text(upload_employer_files(Client(), ["c3.pdf", "c2.pdf", "c1.pdf"], follow=True))
     assert "Junior Python Developer" in page  # job posting summary
-    assert page.count("Strong Match") == 1
+    assert page.count("badge--strong") == 1  # one Strong Match badge
     # Resume 1 (c3.pdf) is the strong match, so it is ranked first
     assert page.index("c3.pdf") < page.index("c2.pdf") < page.index("c1.pdf")
 
@@ -211,6 +221,64 @@ def test_employer_ai_failure_shows_error_and_stays_on_page():
         response = upload_employer_files(Client(), ["c1.pdf"])
     assert response.status_code == 200
     assert "The AI could not process your upload" in text(response)
+
+
+# ---------- Employer: scoring profiles ----------
+
+def test_employer_page_offers_the_scoring_profiles():
+    page = text(Client().get(reverse("matcher:employer_upload")))
+    for name in ("Balanced", "Skills first", "Experience first", "Custom"):
+        assert name in page
+    assert 'value="balanced" checked' in page
+
+
+def test_results_show_the_chosen_profile():
+    with fake_gemini(comparison_reply(2)):
+        page = text(upload_employer_files(Client(), ["c1.pdf", "c2.pdf"], follow=True, profile="experience-first"))
+    assert "Scored with the <strong>Experience first</strong> profile" in page
+    assert load_records("candidate_matches")[0]["profile"]["id"] == "experience-first"
+
+
+def test_without_a_choice_the_balanced_profile_is_used():
+    with fake_gemini(comparison_reply(1)):
+        page = text(upload_employer_files(Client(), ["c1.pdf"], follow=True))
+    assert "Scored with the <strong>Balanced</strong> profile" in page
+
+
+def test_custom_profile_is_used_saved_and_offered_next_time():
+    fields = custom_profile_fields(skills=20, location=30)
+    with fake_gemini(comparison_reply(2)):
+        page = text(upload_employer_files(Client(), ["c1.pdf", "c2.pdf"], follow=True, **fields))
+    assert "Scored with the <strong>Location matters</strong> profile" in page
+    assert [p["name"] for p in load_records("scoring_profiles")] == ["Location matters"]
+    assert "Location matters" in text(Client().get(reverse("matcher:employer_upload")))
+
+
+def test_invalid_custom_profile_shows_error_without_asking_the_ai():
+    with fake_gemini() as gemini:
+        response = upload_employer_files(Client(), ["c1.pdf"], **custom_profile_fields(skills=90))
+    assert response.status_code == 200 and gemini.call_count == 0
+    page = text(response)
+    assert "The weights must add up to 100, not 150." in page
+    assert 'value="custom" checked' in page and 'value="90"' in page  # what was typed is kept
+    assert load_records("scoring_profiles") == [] and load_records("candidate_matches") == []
+
+
+def test_unknown_profile_is_rejected():
+    with fake_gemini() as gemini:
+        response = upload_employer_files(Client(), ["c1.pdf"], profile="S999")
+    assert gemini.call_count == 0
+    assert "Choose one of the scoring profiles." in text(response)
+
+
+def test_changing_profile_rescores_the_same_files_without_the_ai():
+    with fake_gemini(comparison_reply(2)):
+        upload_employer_files(Client(), ["c1.pdf", "c2.pdf"])
+    with fake_gemini() as gemini:
+        page = text(upload_employer_files(Client(), ["c1.pdf", "c2.pdf"], follow=True, profile="skills-first"))
+    assert gemini.call_count == 0
+    assert "Scored with the <strong>Skills first</strong> profile" in page
+    assert [r["profile"]["id"] for r in load_records("candidate_matches")] == ["balanced", "skills-first"]
 
 
 def test_results_pages_are_empty_before_any_upload():

@@ -7,7 +7,9 @@ the saved result is returned instead of asking the AI again.
 
     MatchingService.read_resume()              resume PDF -> saved Resume
     MatchingService.match_jobs_to_resume()     saved resume -> suggested jobs with Jobstreet links
-    MatchingService.match_candidates_to_job()  job posting + resume PDFs -> saved Shortlist
+    MatchingService.match_candidates_to_job()  job posting + resume PDFs -> saved Shortlist,
+                                               scored with the employer's ScoringProfile
+    MatchingService.scoring_profiles()         the built-in and saved ScoringProfiles
 """
 
 import hashlib
@@ -20,6 +22,7 @@ from django.utils import timezone
 from ..domain.candidate import Candidate
 from ..domain.job import JobPosting, JobSuggestion
 from ..domain.resume import Resume
+from ..domain.scoring_profile import ScoringProfile
 from ..domain.shortlist import Shortlist
 from ..managers.ai_manager import AIManager
 from ..managers.ai_providers import GeminiProvider
@@ -146,18 +149,40 @@ class MatchingService:
 
     # ---------- Employer ----------
 
-    def match_candidates_to_job(self, job_file, candidate_files):
+    def match_candidates_to_job(self, job_file, candidate_files, profile=None):
         """Compare several resumes to one job posting in ONE AI call, score them
-        and save the result. Returns the saved Shortlist.
+        with the profile (default: the scorer's own) and save the result.
+        Returns the saved Shortlist.
 
+        If the same files were compared before with another profile, the
+        saved comparison is scored again without asking the AI.
         Raises MatchingError if the AI could not compare them.
         """
+        scorer = self._scorer if profile is None else self._scorer.with_profile(profile)
+
         # The job posting's fingerprint, then each resume's, in upload order
         file_hashes = [self._file_hash(job_file)] + [self._file_hash(f) for f in candidate_files]
-        previous = self._previous("candidate_matches", file_hashes=file_hashes)
+        previous = self._previous("candidate_matches", file_hashes=file_hashes, profile=scorer.profile.to_dict())
         if previous:
             return Shortlist.from_dict(previous)
 
+        compared_before = self._repository.newest("candidate_matches", file_hashes=file_hashes)
+        if compared_before:
+            logger.info("Same files as candidate_matches %s - scoring again with %s",
+                        compared_before["id"], scorer.profile.name)
+            job, candidates = self._saved_comparison(compared_before)
+        else:
+            job, candidates = self._compare_with_ai(job_file, candidate_files)
+
+        shortlist = Shortlist(job, file_hashes=file_hashes, created_at=self._now(), profile=scorer.profile)
+        for candidate in candidates:
+            # Logic Manager decides the score and the Strong Match label
+            shortlist.add(scorer.score(candidate))
+
+        return Shortlist.from_dict(self._repository.save("candidate_matches", shortlist.to_dict()))
+
+    def _compare_with_ai(self, job_file, candidate_files):
+        """Ask the AI to compare the resumes with the job. Returns (JobPosting, [Candidate])."""
         reply = self._ai.run(CandidateComparisonTask(job_file, candidate_files, JobFilterForm.options_for_ai()))
         if reply is None:
             raise MatchingError("The AI could not compare the resumes")
@@ -167,19 +192,21 @@ class MatchingService:
         for ai_candidate in reply["candidates"]:
             by_number.setdefault(ai_candidate["resume_number"], ai_candidate)
 
-        shortlist = Shortlist(self._job_posting(reply["job"], job_file.name),
-                              file_hashes=file_hashes, created_at=self._now())
+        candidates = []
         for number, resume_file in enumerate(candidate_files, start=1):
             ai_candidate = by_number.get(number)
             if ai_candidate is None:
                 logger.warning("AI returned no result for resume %s (%s)", number, resume_file.name)
-                candidate = Candidate.unreadable_resume(resume_file.name)
+                candidates.append(Candidate.unreadable_resume(resume_file.name))
             else:
-                candidate = self._candidate(ai_candidate, resume_file.name)
-            # Logic Manager decides the score and the Strong Match label
-            shortlist.add(self._scorer.score(candidate))
+                candidates.append(self._candidate(ai_candidate, resume_file.name))
+        return self._job_posting(reply["job"], job_file.name), candidates
 
-        return Shortlist.from_dict(self._repository.save("candidate_matches", shortlist.to_dict()))
+    @staticmethod
+    def _saved_comparison(record):
+        """The JobPosting and Candidates from a saved candidate_matches record."""
+        shortlist = Shortlist.from_dict(record)
+        return shortlist.job, [result.candidate for result in shortlist.results]
 
     def find_shortlist(self, shortlist_id):
         """The saved Shortlist with this id, or None."""
@@ -189,6 +216,42 @@ class MatchingService:
     def ranked_candidates(self, shortlist):
         """The shortlist's results, best first and unreadable resumes last."""
         return shortlist.ranked(self._candidate_ranker)
+
+    # ---------- Scoring profiles ----------
+
+    def scoring_profiles(self):
+        """The built-in profiles, then the ones employers saved, oldest first.
+
+        A saved record that is no longer a valid profile is skipped.
+        """
+        profiles = ScoringProfile.built_in()
+        for record in self._repository.load("scoring_profiles"):
+            try:
+                profiles.append(ScoringProfile.from_dict(record))
+            except ValueError as exc:
+                logger.warning("Skipping scoring profile %s: %s", record.get("id"), exc)
+        return profiles
+
+    def find_profile(self, profile_id):
+        """The built-in or saved ScoringProfile with this id, or None."""
+        return next((profile for profile in self.scoring_profiles() if profile.id == profile_id), None)
+
+    def save_profile(self, profile):
+        """Save an employer's profile so it can be chosen again. Returns it with its id.
+
+        A profile with the same name and settings as a saved one is not saved twice.
+        Raises MatchingError if the scorer can't use it (e.g. a weight it doesn't know).
+        """
+        try:
+            self._scorer.with_profile(profile)
+        except ValueError as exc:
+            raise MatchingError(str(exc)) from exc
+
+        settings_only = {key: value for key, value in profile.to_dict().items() if key != "id"}
+        previous = self._repository.newest("scoring_profiles", **settings_only)
+        if previous:
+            return ScoringProfile.from_dict(previous)
+        return ScoringProfile.from_dict(self._repository.save("scoring_profiles", settings_only))
 
     # ---------- Turning the AI's reply into domain objects ----------
 

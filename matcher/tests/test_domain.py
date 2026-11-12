@@ -6,6 +6,7 @@ safe from outside changes and converts to and from saved records.
 from ..domain.candidate import Candidate, MatchResult
 from ..domain.job import JobPosting, JobSuggestion
 from ..domain.resume import Resume
+from ..domain.scoring_profile import ScoringProfile
 from ..domain.shortlist import Shortlist
 from .test_app import raises
 
@@ -188,6 +189,13 @@ SAVED_SHORTLIST = {
     "file_hashes": ["job-hash", "alice-hash"],
     "created_at": "2026-11-11T10:00:00+00:00",
     "job": SAVED_POSTING,
+    "profile": {
+        "id": "skills-first",
+        "name": "Skills first",
+        "weights": {"skills": 60, "experience": 15, "education": 5, "location": 10,
+                    "work_arrangement": 5, "working_hours": 5},
+        "strong_match_skills": 80,
+    },
     "candidates": [SAVED_CANDIDATE],
 }
 
@@ -201,6 +209,17 @@ class ByScore:
 
 def test_shortlist_round_trips_through_a_saved_record():
     assert Shortlist.from_dict(SAVED_SHORTLIST).to_dict() == SAVED_SHORTLIST
+
+
+def test_shortlist_remembers_its_scoring_profile():
+    assert Shortlist.from_dict(SAVED_SHORTLIST).profile.name == "Skills first"
+    assert Shortlist(JobPosting("job.pdf")).profile.name == "Balanced"
+
+
+def test_shortlist_saved_before_profiles_loads_as_balanced():
+    old = {key: value for key, value in SAVED_SHORTLIST.items() if key != "profile"}
+    shortlist = Shortlist.from_dict(old)
+    assert shortlist.profile.name == "Balanced" and shortlist.to_dict()["profile"]["id"] == "balanced"
 
 
 def test_shortlist_holds_results_it_did_not_create():
@@ -231,4 +250,69 @@ def test_unsaved_shortlist_has_no_id_and_cannot_be_changed_from_outside():
     shortlist = Shortlist(JobPosting("job.pdf"))
     shortlist.results.append(MatchResult(Candidate("a.pdf"), 10, False))
     assert shortlist.id is None and "id" not in shortlist.to_dict() and len(shortlist) == 0
+
+
+# ---------- ScoringProfile ----------
+
+SAVED_PROFILE = {
+    "id": "S001",
+    "name": "Location matters",
+    "weights": {"skills": 30, "experience": 20, "education": 10, "location": 30,
+                "work_arrangement": 5, "working_hours": 5},
+    "strong_match_skills": 60,
+}
+
+
+def test_scoring_profile_round_trips_through_a_saved_record():
+    assert ScoringProfile.from_dict(SAVED_PROFILE).to_dict() == SAVED_PROFILE
+
+
+def test_unsaved_scoring_profile_has_no_id():
+    profile = ScoringProfile("Mine", ScoringProfile.DEFAULT_WEIGHTS)
+    assert profile.id is None and "id" not in profile.to_dict()
+    assert profile.strong_match_skills == 70 and profile.strong_match_ratio == 0.7
+
+
+def test_invalid_scoring_profiles_are_rejected():
+    weights = ScoringProfile.DEFAULT_WEIGHTS
+    assert raises(ValueError, ScoringProfile, "  ", weights)                              # no name
+    assert raises(ValueError, ScoringProfile, "Mine", {})                                 # no weights
+    assert raises(ValueError, ScoringProfile, "Mine", dict(weights, skills=50))           # adds up to 110
+    assert raises(ValueError, ScoringProfile, "Mine", dict(weights, skills=-10, experience=75))
+    assert raises(ValueError, ScoringProfile, "Mine", dict(weights, skills=39.5, experience=25.5))
+    assert raises(ValueError, ScoringProfile, "Mine", {"skills": True, "experience": 99})
+    assert raises(ValueError, ScoringProfile, "Mine", weights, 101)                       # threshold
+    assert raises(ValueError, ScoringProfile, "Mine", weights, "70")
+
+
+def test_scoring_profile_error_names_the_bad_weight():
+    try:
+        ScoringProfile("Mine", dict(ScoringProfile.DEFAULT_WEIGHTS, work_arrangement=-1))
+    except ValueError as error:
+        assert "Work arrangement" in str(error)
+    else:
+        raise AssertionError("expected a ValueError")
+
+
+def test_scoring_profile_weights_cannot_be_changed_from_outside():
+    weights = dict(ScoringProfile.DEFAULT_WEIGHTS)
+    profile = ScoringProfile("Mine", weights)
+    weights["skills"] = 0
+    profile.weights["skills"] = 0
+    assert profile.weights["skills"] == 40
+    assert raises(AttributeError, setattr, profile, "strong_match_skills", 0)
+
+
+def test_built_in_profiles_are_valid_and_balanced_is_the_default():
+    profiles = ScoringProfile.built_in()
+    assert [p.name for p in profiles] == ["Balanced", "Skills first", "Experience first"]
+    assert all(sum(p.weights.values()) == 100 for p in profiles)
+    assert ScoringProfile.default().to_dict() == profiles[0].to_dict()
+    assert ScoringProfile.default().weights == ScoringProfile.DEFAULT_WEIGHTS
+
+
+def test_scoring_profile_summary():
+    summary = ScoringProfile.default().summary()
+    assert summary.startswith("Skills 40 · Experience 25")
+    assert summary.endswith("Strong Match from 70% of skills")
 

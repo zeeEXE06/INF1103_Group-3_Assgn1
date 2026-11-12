@@ -15,7 +15,7 @@ from django.shortcuts import redirect, render
 from django.views import View
 from django.views.generic import TemplateView
 
-from .managers.io_manager import JobFilterForm, UploadValidator
+from .managers.io_manager import JobFilterForm, ScoringProfileForm, UploadValidator
 from .services.matching_service import MatchingError, MatchingService
 
 
@@ -57,26 +57,47 @@ class UploadView(MatchingView):
 
 
 class EmployerUploadView(UploadView):
-    """Employer uploads one job posting and one or more resumes."""
+    """Employer uploads one job posting and one or more resumes, and picks
+    or writes the scoring profile the candidates are scored with."""
 
     template_name = "matcher/employer.html"
+
+    def show_form(self, request, profile_form=None, **context):
+        """The upload form with the scoring profile picker (keeping what was picked)."""
+        if profile_form is None:
+            profile_form = ScoringProfileForm(self.service.scoring_profiles())
+        context.setdefault("profile_errors", profile_form.errors)
+        return super().show_form(request, profile_picker=profile_form.picker(), **context)
 
     def post(self, request):
         job_file, candidate_files, job_errors, candidate_errors = (
             UploadValidator().check_employer_upload(request.FILES)
         )
-        if job_errors or candidate_errors:
-            return self.show_form(request, job_errors=job_errors, candidate_errors=candidate_errors)
+        profile_form = ScoringProfileForm(self.service.scoring_profiles(), request.POST)
+        if job_errors or candidate_errors or profile_form.errors:
+            return self.show_form(request, profile_form, job_errors=job_errors, candidate_errors=candidate_errors)
+
+        profile = profile_form.profile
+        if profile_form.is_custom:
+            # Saved so the employer can pick it next time
+            try:
+                profile = self.service.save_profile(profile)
+            except MatchingError as exc:
+                return self.show_form(request, profile_form, profile_errors=[str(exc)])
 
         try:
-            shortlist = self.service.match_candidates_to_job(job_file, candidate_files)
+            shortlist = self.service.match_candidates_to_job(job_file, candidate_files, profile)
         except MatchingError:
             messages.error(request, self.AI_FAILED)
-            return self.show_form(request)
+            return self.show_form(request, profile_form)
 
         # Remember this employer's result so the results page shows theirs only
         request.session["candidate_match_id"] = shortlist.id
-        messages.success(request, f"Compared {len(candidate_files)} candidate resume(s) against the job posting.")
+        messages.success(
+            request,
+            f"Compared {len(candidate_files)} candidate resume(s) against the job posting, "
+            f"scored with the {shortlist.profile.name} profile.",
+        )
         return redirect("matcher:employer_results")
 
 
@@ -84,15 +105,17 @@ class EmployerResultsView(MatchingView):
     """Employer results: candidates ranked against the job posting (no AI call)."""
 
     def get(self, request):
-        job, candidates = None, []
+        job, profile, candidates = None, None, []
         shortlist = self.service.find_shortlist(request.session.get("candidate_match_id"))
         if shortlist:
             job = shortlist.job.to_dict()
+            profile = {"name": shortlist.profile.name, "summary": shortlist.profile.summary()}
             candidates = [
                 {**result.to_dict(), "rank": rank}
                 for rank, result in enumerate(self.service.ranked_candidates(shortlist), start=1)
             ]
-        return render(request, "matcher/employer_results.html", {"candidates": candidates, "job": job})
+        return render(request, "matcher/employer_results.html",
+                      {"candidates": candidates, "job": job, "profile": profile})
 
 
 class JobSeekerUploadView(UploadView):

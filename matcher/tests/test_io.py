@@ -10,7 +10,8 @@ from django.http import QueryDict
 from django.utils.datastructures import MultiValueDict
 from pypdf import PdfWriter
 
-from ..managers.io_manager import LOCATION_CHOICES, JobFilterForm, UploadValidator
+from ..domain.scoring_profile import ScoringProfile
+from ..managers.io_manager import LOCATION_CHOICES, JobFilterForm, ScoringProfileForm, UploadValidator
 from .test_app import make_pdf_file
 
 
@@ -177,3 +178,60 @@ def test_values_from_the_ai_are_kept_only_if_allowed():
     assert JobFilterForm.allowed_value("Mars", LOCATION_CHOICES) == ""
     assert JobFilterForm.allowed_value(None, LOCATION_CHOICES) == ""
 
+
+
+# ---------- ScoringProfileForm ----------
+
+PROFILES = ScoringProfile.built_in()
+
+
+def custom_profile(**fields):
+    """A submitted custom profile, like request.POST."""
+    data = {"profile": "custom", "profile_name": "Mine", "strong_match_skills": "70",
+            **{f"weight_{part}": str(weight) for part, weight in ScoringProfile.DEFAULT_WEIGHTS.items()}}
+    data.update(fields)
+    query = QueryDict(mutable=True)
+    query.update(data)
+    return query
+
+
+def test_new_profile_form_picks_the_first_profile():
+    form = ScoringProfileForm(PROFILES)
+    assert form.profile.name == "Balanced" and not form.errors and not form.is_custom
+
+
+def test_profile_form_picks_a_profile_by_id():
+    form = ScoringProfileForm(PROFILES, {"profile": "experience-first"})
+    assert form.profile.name == "Experience first" and not form.errors
+
+
+def test_profile_form_rejects_an_unknown_profile():
+    form = ScoringProfileForm(PROFILES, {"profile": "S999"})
+    assert form.profile is None and form.errors == ["Choose one of the scoring profiles."]
+
+
+def test_profile_form_reads_a_custom_profile():
+    form = ScoringProfileForm(PROFILES, custom_profile(weight_skills="20", weight_experience="45",
+                                                       strong_match_skills="60"))
+    assert form.is_custom and not form.errors
+    assert form.profile.id is None and form.profile.name == "Mine"
+    assert form.profile.weights["experience"] == 45 and form.profile.strong_match_skills == 60
+
+
+def test_profile_form_turns_bad_custom_values_into_messages():
+    def errors(**fields):
+        return ScoringProfileForm(PROFILES, custom_profile(**fields)).errors
+
+    assert errors(weight_skills="lots") == ["The Skills weight must be a whole number from 0 to 100."]
+    assert errors(weight_skills="50") == ["The weights must add up to 100, not 110."]
+    assert errors(profile_name="  ") == ["Give the scoring profile a name."]
+    assert errors(strong_match_skills="150") == [
+        "The Strong Match skills share must be a whole number from 0 to 100."]
+
+
+def test_profile_picker_keeps_what_was_typed():
+    picker = ScoringProfileForm(PROFILES, custom_profile(weight_skills="50")).picker()
+    assert picker["custom"]["checked"] and picker["custom"]["name"] == "Mine"
+    assert picker["custom"]["weights"][0] == {"field": "weight_skills", "label": "Skills", "value": "50"}
+    assert not any(option["checked"] for option in picker["options"])
+    assert [o["id"] for o in picker["options"]] == ["balanced", "skills-first", "experience-first"]

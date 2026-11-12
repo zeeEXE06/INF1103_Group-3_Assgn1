@@ -7,7 +7,7 @@
     <h1>Upload a job posting and candidate resumes</h1>
     <p class="page-header__lede">
         We'll compare every candidate resume against your job description
-        and rank them by fit. All fields are required.
+        and rank them by fit, using the scoring profile you choose.
     </p>
 </section>
 
@@ -55,6 +55,56 @@
             {% if candidate_errors %}
             <ul class="field-errors">
                 {% for error in candidate_errors %}<li>{{ error }}</li>{% endfor %}
+            </ul>
+            {% endif %}
+        </fieldset>
+
+        <fieldset class="form-section profile-picker">
+            <legend>
+                <span class="form-section__num">3</span>
+                Scoring profile
+            </legend>
+            <p class="form-section__hint">Choose how much each part of the match counts towards a candidate's score.</p>
+
+            <div class="profile-options">
+                {% for option in profile_picker.options %}
+                <label class="profile-option">
+                    <input type="radio" name="profile" value="{{ option.id }}"{% if option.checked %} checked{% endif %}>
+                    <span class="profile-option__text">
+                        <span class="profile-option__name">{{ option.name }}</span>
+                        <span class="profile-option__summary">{{ option.summary }}</span>
+                    </span>
+                </label>
+                {% endfor %}
+                <label class="profile-option">
+                    <input type="radio" name="profile" value="{{ profile_picker.custom.value }}"{% if profile_picker.custom.checked %} checked{% endif %}>
+                    <span class="profile-option__text">
+                        <span class="profile-option__name">Custom</span>
+                        <span class="profile-option__summary">Set your own weights. They're saved so you can choose them next time.</span>
+                    </span>
+                </label>
+            </div>
+
+            <div class="custom-profile">
+                <label class="number-field number-field--wide">
+                    <span>Profile name</span>
+                    <input type="text" name="profile_name" value="{{ profile_picker.custom.name }}" maxlength="60" placeholder="e.g. Location matters">
+                </label>
+                {% for weight in profile_picker.custom.weights %}
+                <label class="number-field">
+                    <span>{{ weight.label }}</span>
+                    <input type="number" name="{{ weight.field }}" value="{{ weight.value }}" min="0" max="100" step="1" inputmode="numeric">
+                </label>
+                {% endfor %}
+                <label class="number-field number-field--wide">
+                    <span>Strong Match needs at least this % of the job's skills</span>
+                    <input type="number" name="strong_match_skills" value="{{ profile_picker.custom.strong_match_skills }}" min="0" max="100" step="1" inputmode="numeric">
+                </label>
+                <p class="form-section__hint number-field--wide">The weights must add up to 100.</p>
+            </div>
+            {% if profile_errors %}
+            <ul class="field-errors">
+                {% for error in profile_errors %}<li>{{ error }}</li>{% endfor %}
             </ul>
             {% endif %}
         </fieldset>

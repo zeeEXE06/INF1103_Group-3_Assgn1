@@ -24,6 +24,11 @@
         {% if job.required_skills %}
         <p class="job-summary__details">Skills required: {{ job.required_skills|join:", " }}</p>
         {% endif %}
+        {% if profile %}
+        <p class="job-summary__details job-summary__profile">
+            Scored with the <strong>{{ profile.name }}</strong> profile: {{ profile.summary }}
+        </p>
+        {% endif %}
     </div>
 </section>
 {% endif %}
