@@ -189,6 +189,13 @@ SAVED_SHORTLIST = {
     "file_hashes": ["job-hash", "alice-hash"],
     "created_at": "2026-11-11T10:00:00+00:00",
     "job": SAVED_POSTING,
+    "profile": {
+        "id": "skills-first",
+        "name": "Skills first",
+        "weights": {"skills": 60, "experience": 15, "education": 5, "location": 10,
+                    "work_arrangement": 5, "working_hours": 5},
+        "strong_match_skills": 80,
+    },
     "candidates": [SAVED_CANDIDATE],
 }
 
@@ -202,6 +209,17 @@ class ByScore:
 
 def test_shortlist_round_trips_through_a_saved_record():
     assert Shortlist.from_dict(SAVED_SHORTLIST).to_dict() == SAVED_SHORTLIST
+
+
+def test_shortlist_remembers_its_scoring_profile():
+    assert Shortlist.from_dict(SAVED_SHORTLIST).profile.name == "Skills first"
+    assert Shortlist(JobPosting("job.pdf")).profile.name == "Balanced"
+
+
+def test_shortlist_saved_before_profiles_loads_as_balanced():
+    old = {key: value for key, value in SAVED_SHORTLIST.items() if key != "profile"}
+    shortlist = Shortlist.from_dict(old)
+    assert shortlist.profile.name == "Balanced" and shortlist.to_dict()["profile"]["id"] == "balanced"
 
 
 def test_shortlist_holds_results_it_did_not_create():
