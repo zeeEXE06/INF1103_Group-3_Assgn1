@@ -9,6 +9,7 @@ import json
 from django.conf import settings
 from django.test import override_settings
 
+from ..domain.scoring_profile import ScoringProfile
 from ..domain.shortlist import Shortlist
 from ..managers.ai_manager import AIManager
 from ..managers.logic_manager import CandidateRanker, CandidateScorer, JobRanker
@@ -112,10 +113,10 @@ def test_only_a_real_true_from_the_ai_counts_as_a_match():
 
 def test_the_service_uses_the_scorer_it_is_given():
     """Resume 2 is a partial match: 2 of 3 skills, no experience match."""
-    weights = dict(CandidateScorer.DEFAULT_WEIGHTS, skills=10, experience=55)
+    weights = dict(ScoringProfile.DEFAULT_WEIGHTS, skills=10, experience=55)
     files = lambda: (make_pdf_file("job.pdf"), [make_pdf_file("a.pdf"), make_pdf_file("b.pdf")])
     default, _, _ = service(comparison_reply(2))
-    custom, _, _ = service(comparison_reply(2), scorer=CandidateScorer(weights))
+    custom, _, _ = service(comparison_reply(2), scorer=CandidateScorer(ScoringProfile("Custom", weights)))
     assert default.match_candidates_to_job(*files()).results[1].score == 57  # 26.7 skills + 30
     assert custom.match_candidates_to_job(*files()).results[1].score == 37   # 6.7 skills + 30
 
