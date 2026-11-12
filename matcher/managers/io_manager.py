@@ -168,6 +168,25 @@ class JobFilterForm:
         """[("WFH", "Work From Home"), ...] -> ["WFH", ...] (skips the "" = all option)."""
         return [value for value, _label in choices if value]
 
+    @classmethod
+    def options_for_ai(cls):
+        """The values the AI must choose from, e.g. {"locations": "North, South, ..."}.
+
+        The AI is given the same values the filters use, so every saved job
+        can be filtered.
+        """
+        return {
+            "locations": ", ".join(cls.choice_values(LOCATION_CHOICES)),
+            "work_arrangements": ", ".join(cls.choice_values(WORK_ARRANGEMENT_CHOICES)),
+            "working_hours": ", ".join(cls.choice_values(WORKING_HOURS_CHOICES)),
+            "industries": ", ".join(cls.choice_values(INDUSTRY_CHOICES)),
+        }
+
+    @classmethod
+    def allowed_value(cls, value, choices):
+        """Keep a value from the AI only if it is one of the filter options, else ""."""
+        return value if value in cls.choice_values(choices) else ""
+
     @property
     def filters(self):
         """The picked values, e.g. {"locations": ["West"], ..., "industry": ""}."""
@@ -196,30 +215,3 @@ class JobFilterForm:
             for value, text in INDUSTRY_CHOICES
         ]
         return {"groups": groups, "industries": industries}
-
-
-# ---------- Used by the views and matching service until they become classes (P3) ----------
-
-def read_resume_upload(request):
-    """Job seeker's upload. Returns (resume_file, errors)."""
-    return UploadValidator().check_resume_upload(request.FILES)
-
-
-def read_employer_upload(request):
-    """Employer's upload. Returns (job_file, candidate_files, job_errors, candidate_errors)."""
-    return UploadValidator().check_employer_upload(request.FILES)
-
-
-def choice_values(choices):
-    """[("WFH", "Work From Home"), ...] -> ["WFH", ...] (skips the "" = all option)."""
-    return JobFilterForm.choice_values(choices)
-
-
-def read_job_filters(query):
-    """The filters picked on the job results page, from the URL (see JobFilterForm)."""
-    return JobFilterForm.from_query(query).filters
-
-
-def filter_bar(filters):
-    """The filter options for the template, with the picked ones marked."""
-    return JobFilterForm(**filters).filter_bar()

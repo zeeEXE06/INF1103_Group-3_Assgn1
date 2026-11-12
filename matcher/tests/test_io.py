@@ -10,7 +10,7 @@ from django.http import QueryDict
 from django.utils.datastructures import MultiValueDict
 from pypdf import PdfWriter
 
-from ..managers.io_manager import JobFilterForm, UploadValidator
+from ..managers.io_manager import LOCATION_CHOICES, JobFilterForm, UploadValidator
 from .test_app import make_pdf_file
 
 
@@ -163,3 +163,17 @@ def test_filter_bar_marks_the_picked_options():
 
 def test_choice_values_skip_the_show_all_option():
     assert JobFilterForm.choice_values([("", "All"), ("WFH", "Work From Home")]) == ["WFH"]
+
+
+def test_ai_is_given_the_same_values_as_the_filters():
+    options = JobFilterForm.options_for_ai()
+    assert sorted(options) == ["industries", "locations", "work_arrangements", "working_hours"]
+    assert options["locations"] == "North, South, East, West, Central"
+    assert "All industries" not in options["industries"]
+
+
+def test_values_from_the_ai_are_kept_only_if_allowed():
+    assert JobFilterForm.allowed_value("West", LOCATION_CHOICES) == "West"
+    assert JobFilterForm.allowed_value("Mars", LOCATION_CHOICES) == ""
+    assert JobFilterForm.allowed_value(None, LOCATION_CHOICES) == ""
+

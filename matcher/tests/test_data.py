@@ -102,6 +102,19 @@ def test_two_repositories_on_different_folders_stay_separate():
     assert b.load("resumes") == []
 
 
+def test_startup_check_loads_every_collection():
+    repository = JsonRepository()
+    assert repository.check_on_startup() == {}
+    repository.save("resumes", {"filename": "a.pdf"})
+    repository.save("job_matches", {"resume_id": "R001"})
+    data_file("old.broken.json").write_text("{not json")
+    loaded = repository.check_on_startup()
+    assert sorted(loaded) == ["job_matches", "resumes"] and len(loaded["resumes"]) == 1
+
+
+def test_startup_check_with_no_data_folder_yet():
+    assert JsonRepository(settings.DATA_DIR / "missing").check_on_startup() == {}
+
 # ---------- Every repository keeps the RecordRepository contract ----------
 
 def check_keeps_the_contract(repository):

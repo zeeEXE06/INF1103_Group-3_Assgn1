@@ -13,7 +13,6 @@ It never calls the AI or reads files.
 
 from ..contracts.scoring import ScoreComponent
 from ..domain.candidate import Candidate, MatchResult
-from ..domain.job import JobSuggestion
 
 
 # ---------- Employer: the parts of a candidate's score ----------
@@ -177,52 +176,3 @@ class JobFilter:
     def apply(self, jobs):
         """The jobs that pass every filter, in the same order."""
         return [job for job in jobs if self.matches(job)]
-
-
-
-# ---------- Used by the views and matching service until they become classes (P3) ----------
-
-def to_score(value):
-    """Turn a match score into a whole number from 0 to 100 (0 if it isn't a number)."""
-    return JobSuggestion("", "", match_score=value).match_score
-
-
-def select_top_jobs(jobs, max_jobs):
-    """Keep the best max_jobs job dicts, one per link, best match first."""
-    top = JobRanker().select_top([JobSuggestion.from_dict(job) for job in jobs], max_jobs)
-    return [job.to_dict() for job in top]
-
-
-def rank_jobs(jobs):
-    """Sort saved job dicts best match first and number them 1, 2, 3...
-
-    Returns new dicts with every JobSuggestion field plus "rank".
-    """
-    ranked = JobRanker().rank([JobSuggestion.from_dict(job) for job in jobs])
-    return [{**job.to_dict(), "rank": rank} for rank, job in enumerate(ranked, start=1)]
-
-
-def filter_jobs(jobs, work_arrangements, locations, working_hours, industry):
-    """Keep only the job dicts that match the chosen filters (see JobFilter)."""
-    job_filter = JobFilter(work_arrangements, locations, working_hours, industry)
-    return [job for job in jobs if job_filter.matches(JobSuggestion.from_dict(job))]
-
-
-def calculate_score(candidate):
-    """Weighted match score from 0 to 100 for a candidate dict."""
-    return CandidateScorer().score(Candidate.from_dict(candidate)).score
-
-
-def is_strong_match(candidate):
-    """Strong Match = skills >= 70% AND experience match AND location match."""
-    return StrongMatchRule().is_met(Candidate.from_dict(candidate))
-
-
-def rank_candidates(candidates):
-    """Sort saved candidate dicts best score first and number them 1, 2, 3...
-
-    Candidates whose resume could not be read go last.
-    Returns new dicts with "rank" added.
-    """
-    ranked = CandidateRanker().rank([MatchResult.from_dict(candidate) for candidate in candidates])
-    return [{**result.to_dict(), "rank": rank} for rank, result in enumerate(ranked, start=1)]

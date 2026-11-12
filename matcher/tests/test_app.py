@@ -1,5 +1,6 @@
 """
-Tests for the whole app: pages, the AI flows and each manager. Run them with:
+Tests for the whole app: the pages and the AI flows from upload to results.
+Each class has its own tests in the other test_*.py files. Run them with:
 
     python run_tests.py
 
@@ -20,18 +21,8 @@ from django.test import Client, override_settings
 from django.urls import reverse
 from pypdf import PdfWriter
 
-from ..managers.ai_manager import extract_resume
-from ..managers.data_manager import filter_records, find_record, load_all_records, load_records, save_record
-from ..managers.logic_manager import (
-    calculate_score,
-    filter_jobs,
-    is_strong_match,
-    rank_candidates,
-    rank_jobs,
-    select_top_jobs,
-    to_score,
-)
-from ..services.matching_service import match_candidates_to_job, match_jobs_to_resume
+from ..managers.data_manager import JsonRepository
+from ..services.matching_service import MatchingError, MatchingService
 from .fakes import FakeProvider
 
 
@@ -90,7 +81,7 @@ def fake_gemini(*replies):
     number of AI calls. With no replies left, any AI call fails.
     """
     provider = FakeProvider(*replies)
-    with patch("matcher.managers.ai_manager.GeminiProvider", return_value=provider):
+    with patch("matcher.services.matching_service.GeminiProvider", return_value=provider):
         yield provider
 
 
@@ -138,12 +129,18 @@ def upload_employer_files(client, candidate_names, follow=False):
     )
 
 
+def load_records(collection):
+    """What is saved in data/<collection>.json."""
+    return JsonRepository().load(collection)
+
+
 def save_resume():
-    return save_record("resumes", {"filename": "r.pdf", "skills": [{"skill": "Python"}]})
+    return JsonRepository().save("resumes", {"filename": "r.pdf", "skills": [{"skill": "Python"}]})
 
 
-def candidate(matched=3, missing=0, **matches):
-    return {"matched_skills": ["s"] * matched, "missing_skills": ["m"] * missing, **matches}
+def match_jobs_to_resume():
+    """Run the job search for the newest saved resume, as the app does."""
+    return MatchingService.default().match_jobs_to_resume()
 
 
 def raises(error_type, func, *args):
@@ -210,7 +207,7 @@ def test_employer_results_are_ranked_with_strong_match():
 
 
 def test_employer_ai_failure_shows_error_and_stays_on_page():
-    with patch("matcher.views.match_candidates_to_job", side_effect=ValueError("AI failed")):
+    with patch.object(MatchingService, "match_candidates_to_job", side_effect=MatchingError("AI failed")):
         response = upload_employer_files(Client(), ["c1.pdf"])
     assert response.status_code == 200
     assert "The AI could not process your upload" in text(response)
@@ -220,24 +217,6 @@ def test_results_pages_are_empty_before_any_upload():
     client = Client()
     assert "No candidates yet" in text(client.get(reverse("matcher:employer_results")))
     assert "No matches yet" in text(client.get(reverse("matcher:job_results")))
-
-
-def test_compare_candidates_marks_skipped_resume_unreadable():
-    reply = {"job": {"title": "Dev"}, "candidates": [
-        {"resume_number": 1, "name": "Ann", "matched_skills": ["Python"], "missing_skills": [],
-         "experience_match": True, "location_match": True},
-    ]}
-    with patch("matcher.services.matching_service.compare_candidates", return_value=reply):
-        record = match_candidates_to_job(make_pdf_file("job.pdf"), [make_pdf_file("ann.pdf"), make_pdf_file("bad.pdf")])
-    ann, bad = record["candidates"]
-    assert (ann["name"], ann["filename"], ann["match_score"], ann["strong_match"]) == ("Ann", "ann.pdf", 75, True)
-    assert bad["unreadable"] and bad["filename"] == "bad.pdf"
-    assert load_records("candidate_matches") == [record]
-
-
-def test_compare_candidates_raises_when_ai_fails():
-    with patch("matcher.services.matching_service.compare_candidates", return_value=None):
-        assert raises(ValueError, match_candidates_to_job, make_pdf_file("job.pdf"), [make_pdf_file("a.pdf")])
 
 
 # ---------- Job seeker ----------
@@ -260,7 +239,7 @@ def test_job_seeker_upload_redirects_and_saves_resume():
 
 
 def test_job_seeker_ai_failure_shows_error_and_saves_nothing():
-    with patch("matcher.services.matching_service.extract_resume", return_value=None):
+    with fake_gemini():  # no replies: the AI fails
         response = upload_resume(Client())
     assert response.status_code == 200
     assert "The AI could not process your upload" in text(response)
@@ -269,7 +248,7 @@ def test_job_seeker_ai_failure_shows_error_and_saves_nothing():
 
 def test_failed_job_search_still_saves_resume():
     with fake_gemini(RESUME_REPLY), \
-            patch("matcher.views.match_jobs_to_resume", side_effect=ValueError("AI failed")):
+            patch.object(MatchingService, "match_jobs_to_resume", side_effect=MatchingError("AI failed")):
         response = upload_resume(Client(), follow=True)
     assert "the job search failed" in text(response)
     assert len(load_records("resumes")) == 1
@@ -292,7 +271,7 @@ def test_suggested_jobs_are_sorted_and_cleaned():
         {"title": "Low", "match_score": "40", "location": "Mars", "work_arrangement": "WFH"},
         {"title": "High", "match_score": 150, "industry": "Technology / IT"},
     ]}
-    with patch("matcher.services.matching_service.suggest_jobs", return_value=reply):
+    with fake_gemini(json.dumps(reply)):
         high, low = match_jobs_to_resume()["jobs"]
     assert (high["title"], high["match_score"]) == ("High", 100)
     assert (low["match_score"], low["location"], low["work_arrangement"]) == (40, "", "WFH")
@@ -308,7 +287,7 @@ def test_suggested_jobs_get_jobstreet_links_without_duplicates():
         {"title": "C++ / Embedded Engineer"},
         {"title": "Data Analyst"},
     ]}
-    with patch("matcher.services.matching_service.suggest_jobs", return_value=reply):
+    with fake_gemini(json.dumps(reply)):
         record = match_jobs_to_resume()
     assert [job["url"] for job in record["jobs"]] == [
         "https://sg.jobstreet.com/junior-python-developer-jobs",
@@ -317,7 +296,7 @@ def test_suggested_jobs_get_jobstreet_links_without_duplicates():
 
 
 def test_job_search_without_a_saved_resume_raises():
-    assert raises(ValueError, match_jobs_to_resume)
+    assert raises(MatchingError, match_jobs_to_resume)
 
 
 def uploaded_client():
@@ -450,120 +429,3 @@ def test_same_employer_files_give_same_ranking_without_asking_the_ai_again():
     assert len(shown_results(first)[0]) == 2
     assert shown_results(second) == shown_results(first)
     assert len(load_records("candidate_matches")) == 1
-
-
-# ---------- AI Manager ----------
-
-def test_ai_replies_pass_the_schema_checks():
-    with fake_gemini(RESUME_REPLY):
-        assert set(extract_resume(make_pdf_file())) == {"education", "experience", "skills"}
-
-
-@override_settings(AI_API_KEY="")
-def test_api_failure_returns_none_instead_of_crashing():
-    assert extract_resume(make_pdf_file()) is None
-
-
-# ---------- Data Manager ----------
-
-def test_missing_file_loads_as_empty():
-    assert load_records("resumes") == []
-
-
-def test_save_then_load():
-    save_record("resumes", {"filename": "a.pdf"})
-    save_record("resumes", {"filename": "b.pdf"})
-    records = load_records("resumes")
-    assert [r["id"] for r in records] == ["R001", "R002"]
-    assert records[1]["filename"] == "b.pdf"
-
-
-def test_broken_file_is_kept_as_backup():
-    (settings.DATA_DIR / "resumes.json").write_text("{not json")
-    assert load_records("resumes") == []
-    save_record("resumes", {"filename": "a.pdf"})
-    assert len(load_records("resumes")) == 1
-    assert (settings.DATA_DIR / "resumes.broken.json").read_text() == "{not json"
-
-
-def test_find_and_filter_records():
-    save_record("job_matches", {"resume_id": "R001", "jobs": []})
-    save_record("job_matches", {"resume_id": "R002", "jobs": []})
-    save_record("job_matches", {"resume_id": "R001", "jobs": []})
-    assert find_record("job_matches", "J002")["resume_id"] == "R002"
-    assert find_record("job_matches", "J999") is None
-    assert find_record("job_matches", None) is None
-    assert [r["id"] for r in filter_records("job_matches", resume_id="R001")] == ["J001", "J003"]
-
-
-def test_load_all_records_at_startup():
-    assert load_all_records() == {}
-    save_record("resumes", {"filename": "a.pdf"})
-    save_record("job_matches", {"resume_id": "R001"})
-    (settings.DATA_DIR / "old.broken.json").write_text("{not json")
-    loaded = load_all_records()
-    assert sorted(loaded) == ["job_matches", "resumes"]
-    assert len(loaded["resumes"]) == 1
-
-
-# ---------- Logic Manager ----------
-
-def test_select_top_jobs_removes_duplicates_sorts_and_caps():
-    jobs = [
-        {"title": "A", "url": "/a", "match_score": 50},
-        {"title": "a", "url": "/a", "match_score": 99},
-        {"title": "B", "url": "/b", "match_score": 80},
-        {"title": "C", "url": "/c", "match_score": 70},
-    ]
-    assert [j["title"] for j in select_top_jobs(jobs, 2)] == ["B", "C"]
-    assert [j["title"] for j in select_top_jobs(jobs, 10)] == ["B", "C", "A"]
-
-
-def test_to_score_keeps_scores_between_0_and_100():
-    assert [to_score(v) for v in (82, "40.6", 150, -5, None, "high")] == [82, 41, 100, 0, 0, 0]
-
-
-def test_rank_jobs_sorts_by_score_and_fills_missing_fields():
-    ranked = rank_jobs([{"title": "B", "match_score": 50}, {"title": "A", "match_score": 90}])
-    assert [(j["rank"], j["title"]) for j in ranked] == [(1, "A"), (2, "B")]
-    assert ranked[0]["location"] == ""
-
-
-def test_filter_jobs_works_on_saved_jobs():
-    jobs = [
-        {"title": "A", "location": "West", "work_arrangement": "On-site",
-         "working_hours": "Standard", "industry": "Manufacturing"},
-        {"title": "B", "location": "Central", "work_arrangement": "Hybrid",
-         "working_hours": "Standard", "industry": "Technology / IT"},
-    ]
-    assert [j["title"] for j in filter_jobs(jobs, [], ["West"], [], "")] == ["A"]
-    assert [j["title"] for j in filter_jobs(jobs, ["Hybrid"], [], ["Standard"], "Technology / IT")] == ["B"]
-    assert len(filter_jobs(jobs, [], [], [], "")) == 2
-
-
-def test_full_match_scores_100():
-    full = candidate(experience_match=True, education_match=True, location_match=True,
-                     work_arrangement_match=True, working_hours_match=True)
-    assert calculate_score(full) == 100
-
-
-def test_score_weights():
-    # Half the skills (20) + experience (25) + location (10)
-    assert calculate_score(candidate(matched=1, missing=1, experience_match=True, location_match=True)) == 55
-    assert calculate_score(candidate(matched=0, missing=0)) == 0
-
-
-def test_strong_match_needs_skills_experience_and_location():
-    assert is_strong_match(candidate(7, 3, experience_match=True, location_match=True))
-    assert not is_strong_match(candidate(6, 4, experience_match=True, location_match=True))
-    assert not is_strong_match(candidate(3, 0, experience_match=False, location_match=True))
-    assert not is_strong_match(candidate(3, 0, experience_match=True, location_match=False))
-
-
-def test_rank_candidates_puts_unreadable_last():
-    ranked = rank_candidates([
-        {"name": "Unreadable", "match_score": 0, "unreadable": True},
-        {"name": "Low", "match_score": 10},
-        {"name": "High", "match_score": 80},
-    ])
-    assert [(c["rank"], c["name"]) for c in ranked] == [(1, "High"), (2, "Low"), (3, "Unreadable")]
