@@ -2,12 +2,15 @@
 I/O Manager - reads and checks what users submit, and prepares the filter
 options shown on the job results page.
 
-    UploadValidator  checks uploaded PDFs before they reach the AI
-    JobFilterForm    the filters on the job results page
+    UploadValidator     checks uploaded PDFs before they reach the AI
+    JobFilterForm       the filters on the job results page
+    ScoringProfileForm  the scoring profile an employer picks or writes
 """
 
 from django.conf import settings
 from pypdf import PdfReader
+
+from ..domain.scoring_profile import ScoringProfile
 
 
 # ---------- Filter options ----------
@@ -215,3 +218,95 @@ class JobFilterForm:
             for value, text in INDUSTRY_CHOICES
         ]
         return {"groups": groups, "industries": industries}
+
+
+# ---------- Employer scoring profile ----------
+
+class ScoringProfileForm:
+    """The scoring profile an employer picks, or writes, on the upload page.
+
+    Either one of the given profiles is picked by its id, or "custom" with a
+    name, a weight for each part of the score and the Strong Match skills
+    share. Bad input becomes error messages, never an exception.
+
+        form = ScoringProfileForm(service.scoring_profiles(), request.POST)
+        if not form.errors: use form.profile
+    """
+
+    CUSTOM = "custom"
+
+    def __init__(self, profiles, data=None):
+        """profiles: the ScoringProfiles to choose from (the first is the default).
+        data: the submitted form (request.POST), or None for a new form."""
+        self._profiles = list(profiles)
+        data = {} if data is None else data
+        self._choice = data.get("profile") or self._profiles[0].id
+        self._name = str(data.get("profile_name", "")).strip()
+        self._weights = {
+            part: str(data.get(f"weight_{part}", weight)).strip()
+            for part, weight in ScoringProfile.DEFAULT_WEIGHTS.items()
+        }
+        self._strong_match_skills = str(
+            data.get("strong_match_skills", ScoringProfile.DEFAULT_STRONG_MATCH_SKILLS)
+        ).strip()
+        self._errors = []
+        self._profile = self._read_profile()
+
+    @property
+    def is_custom(self):
+        """True if the employer wrote their own profile."""
+        return self._choice == self.CUSTOM
+
+    @property
+    def profile(self):
+        """The picked ScoringProfile (a custom one is not saved yet), or None if there are errors."""
+        return self._profile
+
+    @property
+    def errors(self):
+        return list(self._errors)
+
+    def _read_profile(self):
+        if not self.is_custom:
+            profile = next((p for p in self._profiles if p.id == self._choice), None)
+            if profile is None:
+                self._errors.append("Choose one of the scoring profiles.")
+            return profile
+
+        try:
+            weights = {
+                part: self._whole_number(value, f"The {ScoringProfile.label(part)} weight")
+                for part, value in self._weights.items()
+            }
+            strong_match_skills = self._whole_number(self._strong_match_skills, "The Strong Match skills share")
+            return ScoringProfile(self._name, weights, strong_match_skills)
+        except ValueError as exc:
+            self._errors.append(str(exc))
+            return None
+
+    @staticmethod
+    def _whole_number(text, what):
+        try:
+            return int(text)
+        except ValueError:
+            raise ValueError(f"{what} must be a whole number from 0 to 100.") from None
+
+    def picker(self):
+        """The profile options for the template, with the picked one marked and
+        the custom fields filled in with what was typed."""
+        return {
+            "options": [
+                {"id": p.id, "name": p.name, "summary": p.summary(), "checked": p.id == self._choice}
+                for p in self._profiles
+            ],
+            "custom": {
+                "value": self.CUSTOM,
+                "checked": self.is_custom,
+                "name": self._name,
+                "weights": [
+                    {"field": f"weight_{part}", "label": ScoringProfile.label(part), "value": value}
+                    for part, value in self._weights.items()
+                ],
+                "strong_match_skills": self._strong_match_skills,
+            },
+        }
