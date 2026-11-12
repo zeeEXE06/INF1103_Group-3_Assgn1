@@ -25,6 +25,11 @@ A Django web app that matches resumes and jobs using Google Gemini.
 - Gemini compares every resume with the job in one request.
 - Each candidate gets a score, matched and missing skills, a ✓/✗ for each
   requirement and a **Strong Match** badge when they qualify.
+- **Scoring profiles:** choose how the score is weighted, either one of three
+  built-in profiles or a **Custom** one with your own weights, which is saved
+  so you can pick it next time. The results page shows which profile was
+  used. Scoring the same files again with another profile doesn't call the
+  AI again.
 
 **Both**
 
@@ -48,7 +53,8 @@ A Django web app that matches resumes and jobs using Google Gemini.
             │                         │
             ▼                         ▼
    MatchingService               io_manager
-   (the three AI flows)          (UploadValidator, JobFilterForm)
+   (the three AI flows)          (UploadValidator, JobFilterForm,
+                                  ScoringProfileForm)
      │          │          │
      ▼          ▼          ▼
  AIManager  JsonRepository  CandidateScorer, rankers, JobFilter
@@ -64,30 +70,41 @@ in [docs/class-diagram.md](docs/class-diagram.md).
 
 | Module | Job |
 |---|---|
-| `managers/io_manager.py` | `UploadValidator` checks uploads are real, readable PDFs (with `pypdf`) under the limits; `JobFilterForm` reads the results-page filters and gives the AI its allowed values |
+| `managers/io_manager.py` | `UploadValidator` checks uploads are real, readable PDFs (with `pypdf`) under the limits; `JobFilterForm` reads the results-page filters and gives the AI its allowed values; `ScoringProfileForm` reads the employer's picked or custom scoring profile |
 | `managers/ai_manager.py` | `AIManager` runs any AI task through an AI provider, checks the JSON reply and asks again if it's in the wrong format. No business logic. |
 | `managers/ai_providers.py` | `GeminiProvider`: sends the prompts and PDFs to Gemini, retries, falls back to backup models |
 | `managers/ai_tasks.py` | `ResumeExtractionTask`, `JobSuggestionTask`, `CandidateComparisonTask`: each builds its prompt and checks its reply's structure |
 | `managers/data_manager.py` | `JsonRepository`: the only code that reads and writes `data/*.json`. Saving, loading, the `find()`/`filter()` queries and a check of every file at startup. Missing or broken files never crash the app. |
-| `managers/logic_manager.py` | `CandidateScorer` (made of six score components) and `StrongMatchRule` score candidates; `CandidateRanker`, `JobRanker` and `JobFilter` order and filter results. Never calls the AI or reads files. |
-| `services/matching_service.py` | `MatchingService`: `read_resume()`, `match_jobs_to_resume()`, `match_candidates_to_job()`, plus the lookups the results pages use |
+| `managers/logic_manager.py` | `CandidateScorer` (made of six score components, weighted by a `ScoringProfile`) and `StrongMatchRule` score candidates; `CandidateRanker`, `JobRanker` and `JobFilter` order and filter results. Never calls the AI or reads files. |
+| `services/matching_service.py` | `MatchingService`: `read_resume()`, `match_jobs_to_resume()`, `match_candidates_to_job()`, the scoring profiles, plus the lookups the results pages use |
 | `views.py` | One class-based view per page; the two upload pages share an `UploadView` base class |
 
 ### Candidate scoring (employer)
 
-The AI only reports what matches. The Logic Manager decides the score:
+The AI only reports what matches. The Logic Manager decides the score,
+using the scoring profile the employer chose:
 
-| Part | Weight |
-|---|---|
-| Skills (share of the job's skills the candidate has) | 40 |
-| Experience | 25 |
-| Education | 10 |
-| Location | 10 |
-| Work arrangement | 10 |
-| Working hours | 5 |
+| Part | Balanced | Skills first | Experience first |
+|---|---|---|---|
+| Skills (share of the job's skills the candidate has) | 40 | 60 | 30 |
+| Experience | 25 | 15 | 40 |
+| Education | 10 | 5 | 10 |
+| Location | 10 | 10 | 10 |
+| Work arrangement | 10 | 5 | 5 |
+| Working hours | 5 | 5 | 5 |
+| Strong Match skills share | 70% | 80% | 60% |
 
-**Strong Match** = skills ≥ 70% **and** experience matches **and**
-location matches.
+**Strong Match** = skills ≥ the profile's share **and** experience matches
+**and** location matches.
+
+A **Custom** profile needs a name, whole-number weights that add up to 100
+and a Strong Match share from 0 to 100%. Anything else is rejected with a
+message before the AI is called. Balanced is the default, and results saved
+before profiles existed count as Balanced.
+
+To add a new part to the score, write a `ScoreComponent` subclass and add it
+to `CandidateScorer.COMPONENT_TYPES`; the scorer itself doesn't change
+(`test_a_new_score_component_needs_no_change_to_the_scorer`).
 
 ---
 
@@ -253,7 +270,8 @@ returns is saved by the Data Manager as JSON in `data/`:
 |---|---|---|
 | `data/resumes.json` | A job seeker uploads a resume | Education, experience and skills |
 | `data/job_matches.json` | Right after that | The suggested jobs for that resume |
-| `data/candidate_matches.json` | An employer uploads | The job posting details and scored candidates |
+| `data/candidate_matches.json` | An employer uploads | The job posting details, the scoring profile used and the scored candidates |
+| `data/scoring_profiles.json` | An employer uses a Custom profile | The profile's name, weights and Strong Match share |
 
 Each visitor's session (a signed cookie) remembers which saved result is
 theirs, so the results pages only show their own results. These files hold
@@ -291,9 +309,9 @@ INF1103_Group-3_Assgn1/
     │   ├── data.py                 # RecordRepository
     │   └── scoring.py              # ScoreComponent
     ├── domain/                     # Resume, JobSuggestion, JobPosting, Candidate,
-    │                               # MatchResult, Shortlist
+    │                               # MatchResult, Shortlist, ScoringProfile
     ├── managers/
-    │   ├── io_manager.py           # UploadValidator, JobFilterForm
+    │   ├── io_manager.py           # UploadValidator, JobFilterForm, ScoringProfileForm
     │   ├── ai_manager.py           # AIManager: runs AI tasks, checks replies
     │   ├── ai_providers.py         # GeminiProvider: Google Gemini calls
     │   ├── ai_tasks.py             # The three AI requests: prompts and reply checks

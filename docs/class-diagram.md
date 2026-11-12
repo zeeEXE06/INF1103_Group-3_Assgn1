@@ -80,8 +80,12 @@ classDiagram
     class SkillsComponent
     class MatchFlagComponent
     class CandidateScorer {
+        +COMPONENT_TYPES$
+        -_profile : ScoringProfile
         -_components : list~ScoreComponent~
+        -_strong_match_rule : StrongMatchRule
         +score(candidate) MatchResult
+        +with_profile(profile) CandidateScorer
     }
     class StrongMatchRule {
         -_min_skills_ratio
@@ -101,7 +105,8 @@ classDiagram
     ScoreComponent <|-- SkillsComponent
     ScoreComponent <|-- MatchFlagComponent
     CandidateScorer *-- ScoreComponent : composition
-    CandidateScorer --> StrongMatchRule
+    CandidateScorer *-- StrongMatchRule : composition
+    CandidateScorer --> ScoringProfile : weighted by
     CandidateRanker ..> MatchResult : orders
     JobRanker ..> JobSuggestion : orders
     JobFilter ..> JobSuggestion : filters
@@ -121,6 +126,14 @@ classDiagram
         +allowed_value(value, choices) str$
         +filter_bar() dict
     }
+    class ScoringProfileForm {
+        -_profiles : list~ScoringProfile~
+        +is_custom bool
+        +profile ScoringProfile
+        +errors list
+        +picker() dict
+    }
+    ScoringProfileForm ..> ScoringProfile : reads
 
     %% ---------- Domain (P1) ----------
     class Resume {
@@ -157,6 +170,16 @@ classDiagram
         -_strong_match
         +to_dict() dict
     }
+    class ScoringProfile {
+        -_name
+        -_weights
+        -_strong_match_skills
+        +built_in() list$
+        +default() ScoringProfile$
+        +summary() str
+        +to_dict() dict
+        +from_dict(record) ScoringProfile$
+    }
     MatchResult --> Candidate : association
     CandidateScorer ..> MatchResult : creates
 
@@ -170,7 +193,10 @@ classDiagram
         +default() MatchingService$
         +read_resume(file) Resume
         +match_jobs_to_resume(resume_id) dict
-        +match_candidates_to_job(job_file, files) Shortlist
+        +match_candidates_to_job(job_file, files, profile) Shortlist
+        +scoring_profiles() list
+        +find_profile(id) ScoringProfile
+        +save_profile(profile) ScoringProfile
         +find_shortlist(id) Shortlist
         +ranked_candidates(shortlist) list
         +suggested_jobs(id) list
@@ -179,6 +205,7 @@ classDiagram
     class Shortlist {
         -_job : JobPosting
         -_results : list~MatchResult~
+        -_profile : ScoringProfile
         +add(result)
         +ranked(ranker) list
         +strong_matches
@@ -204,6 +231,7 @@ classDiagram
     MatchingService ..> Shortlist : creates
     Shortlist o-- MatchResult : aggregation
     Shortlist --> JobPosting
+    Shortlist --> ScoringProfile : scored with
     MatchingView <|-- UploadView
     UploadView <|-- EmployerUploadView
     UploadView <|-- JobSeekerUploadView
@@ -212,6 +240,7 @@ classDiagram
     MatchingView --> MatchingService : uses
     UploadView ..> UploadValidator : uses
     JobResultsView ..> JobFilterForm : uses
+    EmployerUploadView ..> ScoringProfileForm : uses
 ```
 
 ## Where each OOP concept is shown
@@ -226,4 +255,12 @@ classDiagram
 | Polymorphism | `AIManager.run(task)` runs any `AITask`; `CandidateScorer` adds up `points()` from any `ScoreComponent`; callers use any `RecordRepository` |
 | Association | `MatchingService` uses the AI Manager, repository, scorer and rankers it is given; `MatchResult` refers to a `Candidate` |
 | Aggregation | `AIManager` holds an `AIProvider` made outside it; `Shortlist` holds `MatchResult`s made by the scorer, which can exist without it |
-| Composition | `CandidateScorer` creates and owns its `ScoreComponent`s |
+| Composition | `CandidateScorer` creates and owns its `ScoreComponent`s and `StrongMatchRule`, built from its `ScoringProfile` |
+
+## SOLID in the scoring profiles (P4)
+
+| Principle | Where |
+|---|---|
+| Single responsibility | `ScoringProfile` only holds and checks the weights; `ScoringProfileForm` only reads the form; `CandidateScorer` only scores; `MatchingService` saves and applies profiles |
+| Open/closed | A new part of the score is a new `ScoreComponent` subclass added to `CandidateScorer.COMPONENT_TYPES`, with no change to `CandidateScorer` (tested in `test_logic.py`) |
+| Liskov substitution | `CandidateScorer` treats every `ScoreComponent` the same, including one written in a test (`SummaryComponent`) |
