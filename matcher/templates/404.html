@@ -1,0 +1,13 @@
+{% extends "matcher/base.html" %}
+{% block title %}Page not found — Resume Matcher{% endblock %}
+
+{% block content %}
+<section class="container">
+    <div class="empty-state">
+        <p class="empty-state__icon" aria-hidden="true">🧭</p>
+        <h2>Page not found</h2>
+        <p>That page doesn't exist. Start again from the home page.</p>
+        <a class="btn btn--primary" href="{% url 'matcher:landing' %}">Go to the home page</a>
+    </div>
+</section>
+{% endblock %}
