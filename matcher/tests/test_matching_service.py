@@ -12,9 +12,11 @@ from django.test import override_settings
 from ..domain.scoring_profile import ScoringProfile
 from ..domain.shortlist import Shortlist
 from ..managers.ai_manager import AIManager
+from ..managers.data_manager import JsonRepository
 from ..managers.logic_manager import CandidateRanker, CandidateScorer, JobRanker
 from ..services.matching_service import MatchingError, MatchingService
 from .fakes import FakeProvider, InMemoryRepository
+from .test_ai_providers import fake_client, gemini, using
 from .test_app import JOBS_REPLY, RESUME_REPLY, comparison_reply, make_pdf_file, raises
 
 
@@ -184,6 +186,61 @@ def test_a_profile_the_scorer_cannot_use_is_not_saved():
     assert repository.load("scoring_profiles") == []
 
 
+# ---------- Broken saved records ----------
+
+BALANCED = ScoringProfile.default().to_dict()
+
+
+def test_broken_saved_shortlist_is_treated_as_missing():
+    matching, _, repository = service()
+    repository.save("candidate_matches", {"job": "oops", "candidates": [{"match_score": 500}]})
+    repository.save("candidate_matches", {"job": {}, "profile": {"name": "Bad", "weights": {"skills": 3}},
+                                          "candidates": []})
+    assert matching.find_shortlist("C001") is None
+    assert matching.find_shortlist("C002") is None
+
+
+def test_broken_saved_jobs_are_treated_as_missing():
+    matching, _, repository = service()
+    repository.save("job_matches", {"jobs": "oops"})
+    repository.save("job_matches", {"jobs": [5]})
+    repository.save("job_matches", {})
+    assert [matching.suggested_jobs(job_id) for job_id in ("J001", "J002", "J003")] == [[], [], []]
+
+
+def test_broken_saved_comparison_is_compared_again_by_the_ai():
+    matching, provider, repository = service(comparison_reply(1))
+    files = (make_pdf_file("job.pdf"), [make_pdf_file("a.pdf")])
+    file_hashes = [MatchingService._file_hash(f) for f in (files[0], *files[1])]
+    repository.save("candidate_matches", {"file_hashes": file_hashes, "profile": BALANCED,
+                                          "job": {}, "candidates": [{"match_score": 500}]})
+
+    shortlist = matching.match_candidates_to_job(*files)
+    assert provider.call_count == 1 and shortlist.id == "C002"
+    assert shortlist.results[0].candidate.name == "Candidate 1"
+
+
+def test_broken_saved_resume_is_read_again_by_the_ai():
+    matching, provider, repository = service(RESUME_REPLY)
+    resume_file = make_pdf_file()
+    repository.save("resumes", {"file_hash": MatchingService._file_hash(resume_file), "skills": 5})
+    assert matching.read_resume(resume_file).id == "R002" and provider.call_count == 1
+
+
+def test_job_search_for_a_broken_saved_resume_raises():
+    matching, provider, repository = service(JOBS_REPLY)
+    repository.save("resumes", {"skills": "oops", "education": 5})
+    assert raises(MatchingError, matching.match_jobs_to_resume, "R001")
+    assert provider.call_count == 0
+
+
+def test_broken_saved_profiles_are_skipped():
+    matching, _, repository = service()
+    repository.save("scoring_profiles", {"name": 3})
+    repository.save("scoring_profiles", {"name": "Bad", "weights": "oops"})
+    assert [p.name for p in matching.scoring_profiles()] == ["Balanced", "Skills first", "Experience first"]
+
+
 def test_ai_failure_when_comparing_raises():
     matching, _, repository = service()
     assert raises(MatchingError, matching.match_candidates_to_job, make_pdf_file("job.pdf"), [make_pdf_file("a.pdf")])
@@ -194,3 +251,33 @@ def test_in_memory_service_never_touches_the_data_folder():
     matching, _, _ = service(RESUME_REPLY)
     matching.read_resume(make_pdf_file())
     assert not list(settings.DATA_DIR.glob("*.json"))
+
+
+# ---------- Substitutes give the same results (Liskov substitution) ----------
+
+def run_every_flow(provider, repository):
+    """Run the job seeker and employer flows; return what the user would see."""
+    matching = MatchingService(AIManager(provider), repository, CandidateScorer(), CandidateRanker(), JobRanker())
+    resume = matching.read_resume(make_pdf_file())
+    jobs = matching.suggested_jobs(matching.match_jobs_to_resume(resume.id)["id"])
+    shortlist = matching.match_candidates_to_job(make_pdf_file("job.pdf"),
+                                                 [make_pdf_file("a.pdf"), make_pdf_file("b.pdf")])
+    without_time = {key: value for key, value in shortlist.to_dict().items() if key != "created_at"}
+    return resume.skill_names, [job.to_dict() for job in jobs], without_time
+
+
+def test_any_provider_and_any_repository_give_the_same_results():
+    """GeminiProvider and FakeProvider, JsonRepository and InMemoryRepository
+    can each replace the other without changing what the service returns."""
+    replies = (RESUME_REPLY, JOBS_REPLY, comparison_reply(2))
+    results = []
+    for repository in (JsonRepository, InMemoryRepository):
+        results.append(run_every_flow(FakeProvider(*replies), repository()))
+        with using(fake_client(*replies)):
+            results.append(run_every_flow(gemini(), repository()))
+        # Each run starts from empty storage
+        for collection in ("resumes", "job_matches", "candidate_matches"):
+            (settings.DATA_DIR / f"{collection}.json").unlink(missing_ok=True)
+
+    assert results[0][0] == ["Python", "Django"] and len(results[0][2]["candidates"]) == 2
+    assert all(result == results[0] for result in results)

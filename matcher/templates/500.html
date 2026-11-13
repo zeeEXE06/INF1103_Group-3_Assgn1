@@ -1,0 +1,17 @@
+{% extends "matcher/base.html" %}
+{% comment %}
+Shown for an error nobody planned for. Django renders it without the
+request, so it must not rely on anything the context processors add.
+{% endcomment %}
+{% block title %}Something went wrong — Resume Matcher{% endblock %}
+
+{% block content %}
+<section class="container">
+    <div class="empty-state">
+        <p class="empty-state__icon" aria-hidden="true">⚠️</p>
+        <h2>Something went wrong</h2>
+        <p>Sorry, the app hit a problem it didn't expect. Your uploads were not lost. Please try again.</p>
+        <a class="btn btn--primary" href="{% url 'matcher:landing' %}">Go to the home page</a>
+    </div>
+</section>
+{% endblock %}

@@ -36,6 +36,13 @@ def test_file_without_a_list_is_ignored():
     assert JsonRepository().load("resumes") == []
 
 
+def test_records_that_are_not_objects_are_ignored():
+    data_file("resumes.json").write_text('["oops", 5, null, {"id": "R001"}]')
+    repository = JsonRepository()
+    assert repository.load("resumes") == [{"id": "R001"}]
+    assert repository.find("resumes", "R001") == {"id": "R001"}  # queries no longer crash
+
+
 # ---------- JsonRepository: saving ----------
 
 def test_save_gives_each_record_the_next_id():
