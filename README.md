@@ -37,9 +37,11 @@ A Django web app that matches resumes and jobs using Google Gemini.
 - **Everything depends on the AI.** There is no sample data or offline mode:
   if Gemini can't process an upload, the user sees an error and can't reach
   any results.
-- If Gemini is busy, the app retries and then tries a backup model. Replies
-  that aren't valid JSON or have the wrong structure are rejected and asked
-  for again.
+- If Gemini is busy, the app retries and then tries a backup model. It gives
+  up after `AI_TIMEOUT_SECONDS` instead of hanging. Replies that aren't valid
+  JSON or have the wrong structure are rejected and asked for again.
+- **Failures never crash a page.** Every failure shows a clear message (see
+  [Errors and what the user sees](#errors-and-what-the-user-sees)).
 - **Same input, same output.** Gemini runs at temperature 0, and every
   uploaded PDF is fingerprinted: uploading the same file (or the same set of
   files) again returns the saved result instead of asking the AI again.
@@ -174,7 +176,19 @@ python run_tests.py
 
 You should see `Ran ... tests ... OK`. Every test is a plain function in a
 `matcher/tests/test_*.py` file; none of them call the real AI or touch
-`data/`.
+`data/`. A failing test prints its name and the line that failed.
+
+| File | What it tests |
+|---|---|
+| `test_app.py` | Every page and the AI flows, from upload to results |
+| `test_failures.py` | What the user sees for each kind of failure (the error matrix below) |
+| `test_contracts.py` | The abstract classes and interface |
+| `test_domain.py` | Domain classes: encapsulation, saving and loading, `ScoringProfile` checks |
+| `test_ai_providers.py`, `test_ai_tasks.py`, `test_ai_manager.py` | AI Manager: Gemini fallbacks and timeouts, prompts, reply checks |
+| `test_data.py` | Data Manager: JSON files, broken files, both repositories |
+| `test_logic.py` | Logic Manager: scoring, profiles, ranking, filters |
+| `test_io.py` | IO Manager: upload checks, filters, the scoring profile form |
+| `test_matching_service.py` | `MatchingService`, broken saved records, and that any provider or repository gives the same results |
 
 ---
 
@@ -245,6 +259,7 @@ MAX_JOBS = int(os.environ.get("MAX_JOBS", "15"))
 | `AI_API_KEY` | *(empty)* | **Required.** Your Gemini API key (`GEMINI_API_KEY` also works) |
 | `AI_MODEL` | `gemini-3.8-flash` | Gemini model to use |
 | `AI_FALLBACK_MODELS` | `gemini-3.5-flash` | Backup models (comma-separated) tried if `AI_MODEL` is busy |
+| `AI_TIMEOUT_SECONDS` | `60` | Longest wait for one Gemini reply (the SDK tries up to 3 times) |
 | `MAX_UPLOAD_SIZE_MB` | `10` | Largest PDF users can upload |
 | `MAX_CANDIDATES` | `10` | Most resumes an employer can compare at once |
 | `MAX_JOBS` | `15` | Most jobs suggested for one resume |
@@ -258,6 +273,45 @@ MAX_JOBS = int(os.environ.get("MAX_JOBS", "15"))
 
 To add a setting: add it to `settings.py` with a safe default, add it to
 `.env.example`, and tell the team to copy it into their `.env`.
+
+---
+
+## Errors and what the user sees
+
+Every failure is caught where it happens and turned into a message; none of
+them crash a page or leave half-saved results. Each row has a test, most of
+them in `matcher/tests/test_failures.py`.
+
+| Failure | Caught by | What the user sees |
+|---|---|---|
+| Not a PDF, empty, over `MAX_UPLOAD_SIZE_MB`, corrupt or password-protected | `UploadValidator` (IO Manager) | The upload form again, with a message under the file; the AI isn't called |
+| More than `MAX_CANDIDATES` resumes | `UploadValidator` | "Upload at most N resumes at a time." |
+| Custom profile with bad weights | `ScoringProfileForm` / `ScoringProfile` | The form again with e.g. "The weights must add up to 100, not 150."; the AI isn't called |
+| No API key, bad key, network down, every model busy | `GeminiProvider` raises `AIProviderError` | "The AI could not process your upload right now. Please try again later." |
+| No reply within `AI_TIMEOUT_SECONDS` | `GeminiProvider` raises `AIProviderError` | Same message |
+| Reply isn't JSON or has the wrong structure | `AIManager` asks once more, then gives up | Same message if the second reply is also bad |
+| AI skips one of the resumes | `MatchingService` | That candidate is shown last as "Could not read this resume." |
+| Resume read but the job search fails | `MatchingService` raises `MatchingError` | "Resume received, but the job search failed." The resume is kept. |
+| A data file isn't valid JSON | `JsonRepository` | Nothing; the file is treated as empty and kept as `<name>.broken.json` |
+| A saved record is broken (e.g. edited by hand) | `MatchingService._from_saved()` | The results page shows "No candidates yet" / "No matches yet"; an upload asks the AI again |
+| An unknown address | Django, `404.html` | "Page not found" with a link home |
+| Any error nobody planned for (with `DJANGO_DEBUG=False`) | Django, `500.html` | "Something went wrong" with no error details |
+
+Problems are also written to the terminal log (e.g. a model fallback, a
+rejected AI reply or a skipped record).
+
+---
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and pull request:
+
+1. **tests**: installs `requirements.txt` on Python 3.13 and runs
+   `python run_tests.py`.
+2. **docker**: builds the Docker image and runs the tests inside it, so the
+   image is checked too.
+
+A pull request into `phase2Main` should only be merged when both are green.
 
 ---
 
@@ -319,7 +373,9 @@ INF1103_Group-3_Assgn1/
     │   └── logic_manager.py        # CandidateScorer, rankers, JobFilter
     ├── services/
     │   └── matching_service.py     # MatchingService: the three AI flows
-    ├── templates/matcher/          # landing, employer, job_seeker and the two results pages
+    ├── templates/
+    │   ├── 404.html, 500.html      # Friendly error pages
+    │   └── matcher/                # landing, employer, job_seeker and the two results pages
     └── static/
         ├── css/style.css
         └── js/main.js              # Drag-and-drop uploads, loading spinner
