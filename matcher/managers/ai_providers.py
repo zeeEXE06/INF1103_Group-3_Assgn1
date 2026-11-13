@@ -10,9 +10,12 @@ Settings (in .env):
     AI_API_KEY         free Gemini key from https://aistudio.google.com/apikey (required)
     AI_MODEL           Gemini model to use
     AI_FALLBACK_MODELS models to try, in order, if AI_MODEL is busy
+    AI_TIMEOUT_SECONDS longest wait for one reply
 """
 
 import logging
+
+import httpx
 
 from django.conf import settings
 
@@ -30,13 +33,21 @@ class GeminiProvider(AIProvider):
     # and each model has its own quota.
     FALLBACK_STATUS_CODES = (429, *RETRY_STATUS_CODES)
 
-    def __init__(self, api_key=None, model=None, fallback_models=None):
+    def __init__(self, api_key=None, model=None, fallback_models=None, timeout_seconds=None):
         """Uses the settings in .env unless other values are given."""
         self._api_key = settings.AI_API_KEY if api_key is None else api_key
         main_model = settings.AI_MODEL if model is None else model
         backups = settings.AI_FALLBACK_MODELS if fallback_models is None else fallback_models
         self._models = [main_model, *backups]
+        self._timeout_seconds = settings.AI_TIMEOUT_SECONDS if timeout_seconds is None else timeout_seconds
+        if self._timeout_seconds <= 0:
+            raise ValueError(f"timeout_seconds must be more than 0, not {self._timeout_seconds!r}")
         self._client = None  # created on the first request
+
+    @property
+    def timeout_seconds(self):
+        """Longest wait for one reply before giving up."""
+        return self._timeout_seconds
 
     @property
     def models(self):
@@ -46,14 +57,16 @@ class GeminiProvider(AIProvider):
     def generate(self, contents):
         """Send contents to Gemini and return its reply text.
 
-        Any failure - no API key, bad key, network down, every model
-        busy - is raised as AIProviderError, so callers only need to
-        handle one kind of error.
+        Any failure - no API key, bad key, network down, no reply in
+        time, every model busy - is raised as AIProviderError, so callers
+        only need to handle one kind of error.
         """
         try:
             return self._generate([self._to_part(item) for item in contents])
         except AIProviderError:
             raise
+        except httpx.TimeoutException as exc:
+            raise AIProviderError(f"Gemini did not reply within {self._timeout_seconds} seconds") from exc
         except Exception as exc:
             raise AIProviderError(f"Gemini request failed: {exc}") from exc
 
@@ -77,7 +90,7 @@ class GeminiProvider(AIProvider):
                 logger.warning("%s unavailable (%s), trying %s", model, exc.code, self._models[i + 1])
 
     def _get_client(self):
-        """The Gemini client, created once. Retries busy servers after ~2s and ~4s."""
+        """The Gemini client, created once. Retries busy servers and timeouts after ~2s and ~4s."""
         if self._client is None:
             from google import genai
             from google.genai import types
@@ -87,6 +100,7 @@ class GeminiProvider(AIProvider):
             self._client = genai.Client(
                 api_key=self._api_key,
                 http_options=types.HttpOptions(
+                    timeout=self._timeout_seconds * 1000,  # the SDK counts in milliseconds
                     retry_options=types.HttpRetryOptions(
                         attempts=3,
                         initial_delay=2,

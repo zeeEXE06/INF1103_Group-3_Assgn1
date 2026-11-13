@@ -6,6 +6,7 @@ FakeProvider stands in for Gemini in the other tests.
 
 from unittest.mock import MagicMock, patch
 
+import httpx
 from django.test import override_settings
 from google.genai import errors, types
 
@@ -47,6 +48,34 @@ def models_tried(client):
 def test_gemini_uses_the_settings_unless_told_otherwise():
     assert GeminiProvider().models == ["main", "backup"]
     assert GeminiProvider(model="other", fallback_models=[]).models == ["other"]
+
+
+@override_settings(AI_TIMEOUT_SECONDS=45)
+def test_gemini_timeout_comes_from_the_settings_unless_given():
+    assert GeminiProvider().timeout_seconds == 45
+    assert gemini().timeout_seconds == 45
+    assert GeminiProvider(timeout_seconds=5).timeout_seconds == 5
+    assert raises(ValueError, GeminiProvider, None, None, None, 0)
+
+
+def test_gemini_client_is_given_the_timeout_in_milliseconds():
+    with patch("google.genai.Client") as client_class:
+        GeminiProvider(api_key="test", timeout_seconds=30)._get_client()
+    http_options = client_class.call_args.kwargs["http_options"]
+    assert http_options.timeout == 30_000
+
+
+def test_no_reply_in_time_raises_a_clear_provider_error():
+    client = fake_client(httpx.ReadTimeout("timed out"))
+    with using(client):
+        try:
+            GeminiProvider(api_key="test", model="main", fallback_models=["backup"], timeout_seconds=30).generate(["hi"])
+        except AIProviderError as error:
+            assert "did not reply within 30 seconds" in str(error)
+        else:
+            raise AssertionError("expected an AIProviderError")
+    # A timeout is not a busy model, so the backup model is not tried as well
+    assert models_tried(client) == ["main"]
 
 
 def test_gemini_returns_the_reply_text():

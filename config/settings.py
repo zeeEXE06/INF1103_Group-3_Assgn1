@@ -115,3 +115,5 @@ AI_MODEL = os.environ.get("AI_MODEL", "gemini-3.8-flash")
 AI_FALLBACK_MODELS = [
     m.strip() for m in os.environ.get("AI_FALLBACK_MODELS", "gemini-3.5-flash").split(",") if m.strip()
 ]
+# Longest wait for one reply from Gemini before giving up (the SDK tries up to 3 times)
+AI_TIMEOUT_SECONDS = int(os.environ.get("AI_TIMEOUT_SECONDS", "60"))
