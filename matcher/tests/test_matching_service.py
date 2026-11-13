@@ -12,9 +12,11 @@ from django.test import override_settings
 from ..domain.scoring_profile import ScoringProfile
 from ..domain.shortlist import Shortlist
 from ..managers.ai_manager import AIManager
+from ..managers.data_manager import JsonRepository
 from ..managers.logic_manager import CandidateRanker, CandidateScorer, JobRanker
 from ..services.matching_service import MatchingError, MatchingService
 from .fakes import FakeProvider, InMemoryRepository
+from .test_ai_providers import fake_client, gemini, using
 from .test_app import JOBS_REPLY, RESUME_REPLY, comparison_reply, make_pdf_file, raises
 
 
@@ -249,3 +251,33 @@ def test_in_memory_service_never_touches_the_data_folder():
     matching, _, _ = service(RESUME_REPLY)
     matching.read_resume(make_pdf_file())
     assert not list(settings.DATA_DIR.glob("*.json"))
+
+
+# ---------- Substitutes give the same results (Liskov substitution) ----------
+
+def run_every_flow(provider, repository):
+    """Run the job seeker and employer flows; return what the user would see."""
+    matching = MatchingService(AIManager(provider), repository, CandidateScorer(), CandidateRanker(), JobRanker())
+    resume = matching.read_resume(make_pdf_file())
+    jobs = matching.suggested_jobs(matching.match_jobs_to_resume(resume.id)["id"])
+    shortlist = matching.match_candidates_to_job(make_pdf_file("job.pdf"),
+                                                 [make_pdf_file("a.pdf"), make_pdf_file("b.pdf")])
+    without_time = {key: value for key, value in shortlist.to_dict().items() if key != "created_at"}
+    return resume.skill_names, [job.to_dict() for job in jobs], without_time
+
+
+def test_any_provider_and_any_repository_give_the_same_results():
+    """GeminiProvider and FakeProvider, JsonRepository and InMemoryRepository
+    can each replace the other without changing what the service returns."""
+    replies = (RESUME_REPLY, JOBS_REPLY, comparison_reply(2))
+    results = []
+    for repository in (JsonRepository, InMemoryRepository):
+        results.append(run_every_flow(FakeProvider(*replies), repository()))
+        with using(fake_client(*replies)):
+            results.append(run_every_flow(gemini(), repository()))
+        # Each run starts from empty storage
+        for collection in ("resumes", "job_matches", "candidate_matches"):
+            (settings.DATA_DIR / f"{collection}.json").unlink(missing_ok=True)
+
+    assert results[0][0] == ["Python", "Django"] and len(results[0][2]["candidates"]) == 2
+    assert all(result == results[0] for result in results)
