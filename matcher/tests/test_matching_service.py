@@ -184,6 +184,61 @@ def test_a_profile_the_scorer_cannot_use_is_not_saved():
     assert repository.load("scoring_profiles") == []
 
 
+# ---------- Broken saved records ----------
+
+BALANCED = ScoringProfile.default().to_dict()
+
+
+def test_broken_saved_shortlist_is_treated_as_missing():
+    matching, _, repository = service()
+    repository.save("candidate_matches", {"job": "oops", "candidates": [{"match_score": 500}]})
+    repository.save("candidate_matches", {"job": {}, "profile": {"name": "Bad", "weights": {"skills": 3}},
+                                          "candidates": []})
+    assert matching.find_shortlist("C001") is None
+    assert matching.find_shortlist("C002") is None
+
+
+def test_broken_saved_jobs_are_treated_as_missing():
+    matching, _, repository = service()
+    repository.save("job_matches", {"jobs": "oops"})
+    repository.save("job_matches", {"jobs": [5]})
+    repository.save("job_matches", {})
+    assert [matching.suggested_jobs(job_id) for job_id in ("J001", "J002", "J003")] == [[], [], []]
+
+
+def test_broken_saved_comparison_is_compared_again_by_the_ai():
+    matching, provider, repository = service(comparison_reply(1))
+    files = (make_pdf_file("job.pdf"), [make_pdf_file("a.pdf")])
+    file_hashes = [MatchingService._file_hash(f) for f in (files[0], *files[1])]
+    repository.save("candidate_matches", {"file_hashes": file_hashes, "profile": BALANCED,
+                                          "job": {}, "candidates": [{"match_score": 500}]})
+
+    shortlist = matching.match_candidates_to_job(*files)
+    assert provider.call_count == 1 and shortlist.id == "C002"
+    assert shortlist.results[0].candidate.name == "Candidate 1"
+
+
+def test_broken_saved_resume_is_read_again_by_the_ai():
+    matching, provider, repository = service(RESUME_REPLY)
+    resume_file = make_pdf_file()
+    repository.save("resumes", {"file_hash": MatchingService._file_hash(resume_file), "skills": 5})
+    assert matching.read_resume(resume_file).id == "R002" and provider.call_count == 1
+
+
+def test_job_search_for_a_broken_saved_resume_raises():
+    matching, provider, repository = service(JOBS_REPLY)
+    repository.save("resumes", {"skills": "oops", "education": 5})
+    assert raises(MatchingError, matching.match_jobs_to_resume, "R001")
+    assert provider.call_count == 0
+
+
+def test_broken_saved_profiles_are_skipped():
+    matching, _, repository = service()
+    repository.save("scoring_profiles", {"name": 3})
+    repository.save("scoring_profiles", {"name": "Bad", "weights": "oops"})
+    assert [p.name for p in matching.scoring_profiles()] == ["Balanced", "Skills first", "Experience first"]
+
+
 def test_ai_failure_when_comparing_raises():
     matching, _, repository = service()
     assert raises(MatchingError, matching.match_candidates_to_job, make_pdf_file("job.pdf"), [make_pdf_file("a.pdf")])

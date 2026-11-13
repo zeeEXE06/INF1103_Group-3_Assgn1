@@ -54,7 +54,11 @@ class JsonRepository(RecordRepository):
         if not isinstance(records, list):
             logger.warning("%s does not contain a list, ignoring it", path)
             return []
-        return records
+        # Every record must be a JSON object; anything else can't be queried
+        kept = [record for record in records if isinstance(record, dict)]
+        if len(kept) < len(records):
+            logger.warning("Ignoring %s records in %s that are not objects", len(records) - len(kept), path)
+        return kept
 
     def save(self, collection, record):
         """Add a record to a collection and return it with its new id, e.g. "R001"."""

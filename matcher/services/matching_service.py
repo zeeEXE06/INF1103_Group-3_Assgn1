@@ -5,6 +5,9 @@ The same input always gives the same output: every uploaded PDF is
 fingerprinted, and if the same file (or set of files) was processed before,
 the saved result is returned instead of asking the AI again.
 
+A saved record that can't be read (e.g. edited by hand) is logged and
+treated as missing, so it never crashes a page.
+
     MatchingService.read_resume()              resume PDF -> saved Resume
     MatchingService.match_jobs_to_resume()     saved resume -> suggested jobs with Jobstreet links
     MatchingService.match_candidates_to_job()  job posting + resume PDFs -> saved Shortlist,
@@ -84,9 +87,9 @@ class MatchingService:
         Raises MatchingError if the AI could not read it.
         """
         resume_hash = self._file_hash(resume_file)
-        previous = self._previous("resumes", file_hash=resume_hash)
+        previous = self._from_saved(Resume.from_dict, self._previous("resumes", file_hash=resume_hash))
         if previous:
-            return Resume.from_dict(previous)
+            return previous
 
         reply = self._ai.run(ResumeExtractionTask(resume_file))
         if reply is None:
@@ -113,13 +116,13 @@ class MatchingService:
         records = self._repository.load("resumes")
         if resume_id is not None:
             records = [record for record in records if record.get("id") == resume_id]
-        if not records:
-            raise MatchingError(f"No saved resume found (resume_id={resume_id})")
-        resume = Resume.from_dict(records[-1])
+        resume = self._from_saved(Resume.from_dict, records[-1]) if records else None
+        if resume is None:
+            raise MatchingError(f"No readable saved resume found (resume_id={resume_id})")
 
         max_jobs = settings.MAX_JOBS
         previous = self._previous("job_matches", resume_id=resume.id, max_jobs=max_jobs)
-        if previous:
+        if previous and self._from_saved(self._saved_jobs, previous) is not None:
             return previous
 
         reply = self._ai.run(JobSuggestionTask(resume, max_jobs, JobFilterForm.options_for_ai()))
@@ -136,10 +139,8 @@ class MatchingService:
 
     def suggested_jobs(self, job_match_id):
         """The saved jobs for a job search, best match first ([] if not found)."""
-        record = self._repository.find("job_matches", job_match_id)
-        if not record:
-            return []
-        return self._job_ranker.rank([JobSuggestion.from_dict(job) for job in record.get("jobs", [])])
+        jobs = self._from_saved(self._saved_jobs, self._repository.find("job_matches", job_match_id))
+        return self._job_ranker.rank(jobs) if jobs else []
 
     @staticmethod
     def job_filter(filters):
@@ -162,15 +163,16 @@ class MatchingService:
 
         # The job posting's fingerprint, then each resume's, in upload order
         file_hashes = [self._file_hash(job_file)] + [self._file_hash(f) for f in candidate_files]
-        previous = self._previous("candidate_matches", file_hashes=file_hashes, profile=scorer.profile.to_dict())
+        previous = self._from_saved(Shortlist.from_dict, self._previous(
+            "candidate_matches", file_hashes=file_hashes, profile=scorer.profile.to_dict()))
         if previous:
-            return Shortlist.from_dict(previous)
+            return previous
 
-        compared_before = self._repository.newest("candidate_matches", file_hashes=file_hashes)
+        compared_before = self._from_saved(
+            self._saved_comparison, self._repository.newest("candidate_matches", file_hashes=file_hashes))
         if compared_before:
-            logger.info("Same files as candidate_matches %s - scoring again with %s",
-                        compared_before["id"], scorer.profile.name)
-            job, candidates = self._saved_comparison(compared_before)
+            logger.info("Same files compared before - scoring again with %s", scorer.profile.name)
+            job, candidates = compared_before
         else:
             job, candidates = self._compare_with_ai(job_file, candidate_files)
 
@@ -210,8 +212,7 @@ class MatchingService:
 
     def find_shortlist(self, shortlist_id):
         """The saved Shortlist with this id, or None."""
-        record = self._repository.find("candidate_matches", shortlist_id)
-        return Shortlist.from_dict(record) if record else None
+        return self._from_saved(Shortlist.from_dict, self._repository.find("candidate_matches", shortlist_id))
 
     def ranked_candidates(self, shortlist):
         """The shortlist's results, best first and unreadable resumes last."""
@@ -224,13 +225,8 @@ class MatchingService:
 
         A saved record that is no longer a valid profile is skipped.
         """
-        profiles = ScoringProfile.built_in()
-        for record in self._repository.load("scoring_profiles"):
-            try:
-                profiles.append(ScoringProfile.from_dict(record))
-            except ValueError as exc:
-                logger.warning("Skipping scoring profile %s: %s", record.get("id"), exc)
-        return profiles
+        saved = (self._from_saved(ScoringProfile.from_dict, r) for r in self._repository.load("scoring_profiles"))
+        return ScoringProfile.built_in() + [profile for profile in saved if profile is not None]
 
     def find_profile(self, profile_id):
         """The built-in or saved ScoringProfile with this id, or None."""
@@ -248,9 +244,10 @@ class MatchingService:
             raise MatchingError(str(exc)) from exc
 
         settings_only = {key: value for key, value in profile.to_dict().items() if key != "id"}
-        previous = self._repository.newest("scoring_profiles", **settings_only)
+        previous = self._from_saved(ScoringProfile.from_dict,
+                                    self._repository.newest("scoring_profiles", **settings_only))
         if previous:
-            return ScoringProfile.from_dict(previous)
+            return previous
         return ScoringProfile.from_dict(self._repository.save("scoring_profiles", settings_only))
 
     # ---------- Turning the AI's reply into domain objects ----------
@@ -296,6 +293,34 @@ class MatchingService:
             working_hours=JobFilterForm.allowed_value(ai_job.get("working_hours"), WORKING_HOURS_CHOICES),
             industry=JobFilterForm.allowed_value(ai_job.get("industry"), INDUSTRY_CHOICES),
         )
+
+    # ---------- Reading saved records ----------
+
+    # What building a domain object from a hand-edited or damaged record can raise
+    BROKEN_RECORD_ERRORS = (ValueError, TypeError, AttributeError, KeyError)
+
+    @classmethod
+    def _from_saved(cls, build, record):
+        """build(record), or None if there is no record or it can't be read.
+
+        A broken record is logged and treated as missing, so a page shows
+        "nothing yet" (or the AI is asked again) instead of crashing.
+        """
+        if record is None:
+            return None
+        try:
+            return build(record)
+        except cls.BROKEN_RECORD_ERRORS as exc:
+            logger.warning("Ignoring saved record %s that can't be read: %r", record.get("id"), exc)
+            return None
+
+    @staticmethod
+    def _saved_jobs(record):
+        """The JobSuggestions in a saved job_matches record."""
+        jobs = record["jobs"]
+        if not isinstance(jobs, list):
+            raise TypeError(f'"jobs" is a {type(jobs).__name__}, not a list')
+        return [JobSuggestion.from_dict(job) for job in jobs]
 
     # ---------- Helpers ----------
 
