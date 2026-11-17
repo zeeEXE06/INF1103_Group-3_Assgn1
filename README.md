@@ -259,7 +259,7 @@ MAX_JOBS = int(os.environ.get("MAX_JOBS", "15"))
 | `AI_API_KEY` | *(empty)* | **Required.** Your Gemini API key (`GEMINI_API_KEY` also works) |
 | `AI_MODEL` | `gemini-3.8-flash` | Gemini model to use |
 | `AI_FALLBACK_MODELS` | `gemini-3.5-flash` | Backup models (comma-separated) tried if `AI_MODEL` is busy |
-| `AI_TIMEOUT_SECONDS` | `60` | Longest wait for one Gemini reply (the SDK tries up to 3 times) |
+| `AI_TIMEOUT_SECONDS` | `180` | Longest wait for one Gemini reply (the SDK tries up to 3 times) |
 | `MAX_UPLOAD_SIZE_MB` | `10` | Largest PDF users can upload |
 | `MAX_CANDIDATES` | `10` | Most resumes an employer can compare at once |
 | `MAX_JOBS` | `15` | Most jobs suggested for one resume |
